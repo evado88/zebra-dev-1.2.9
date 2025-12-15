@@ -1,0 +1,523 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: i18next-conv\n"
+"POT-Creation-Date: 2025-08-28T10:34:17.964Z\n"
+"PO-Revision-Date: 2018-10-25T09:02:35.143Z\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+
+msgid "Low"
+msgstr ""
+
+msgid "Medium"
+msgstr ""
+
+msgid "High"
+msgstr ""
+
+msgid "Less than 0.1%"
+msgstr ""
+
+msgid "Between 0.1% to 0.25%"
+msgstr ""
+
+msgid "Above 0.25%"
+msgstr ""
+
+msgid "Within a district"
+msgstr ""
+
+msgid "Within a province with more than one district affected"
+msgstr ""
+
+msgid ""
+"More than one province affected with high threat of spread locally and "
+"internationally"
+msgstr ""
+
+msgid ""
+"Available within the district with support from provincial and national level"
+msgstr ""
+
+msgid "Available within the province with minimal support from national level"
+msgstr ""
+
+msgid "Available at national with support required from international"
+msgstr ""
+
+msgid "Capability 1"
+msgstr ""
+
+msgid "Capability 2"
+msgstr ""
+
+msgid "Grade 1"
+msgstr ""
+
+msgid "Grade 2"
+msgstr ""
+
+msgid "Grade 3"
+msgstr ""
+
+msgid "Invalid grade"
+msgstr ""
+
+msgid "Add new option"
+msgstr ""
+
+msgid "Reset"
+msgstr ""
+
+msgid "Save"
+msgstr ""
+
+msgid "Indicates required"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Edit Action Plan"
+msgstr ""
+
+msgid "Edit Details"
+msgstr ""
+
+msgid "Replace case data"
+msgstr ""
+
+msgid "Show resources"
+msgstr ""
+
+msgid "Complete Event"
+msgstr ""
+
+msgid "Notes"
+msgstr ""
+
+msgid "Close"
+msgstr ""
+
+msgid "Events Documents"
+msgstr ""
+
+msgid "Edit Profile"
+msgstr ""
+
+msgid "Currently assigned:"
+msgstr ""
+
+msgid "Multiple uploads not allowed, please select one file"
+msgstr ""
+
+msgid "Error parsing file"
+msgstr ""
+
+msgid "Error uploading file."
+msgstr ""
+
+msgid "Select a file"
+msgstr ""
+
+msgid "Errors in file"
+msgstr ""
+
+msgid "Download empty template"
+msgstr ""
+
+msgid "Clear Case Data"
+msgstr ""
+
+msgid "Download Case Data"
+msgstr ""
+
+msgid "Confirm remove the file"
+msgstr ""
+
+msgid "Delete"
+msgstr ""
+
+msgid "Are you sure you want to remove the file?"
+msgstr ""
+
+msgid "Error loading current Incident Management Team"
+msgstr ""
+
+msgid "Create Event"
+msgstr ""
+
+msgid "The map with these filters could not be found."
+msgstr ""
+
+msgid "Search"
+msgstr ""
+
+msgid "Last updated: "
+msgstr ""
+
+msgid "Add"
+msgstr "Añadir"
+
+msgid "Event Source"
+msgstr ""
+
+msgid "Median"
+msgstr ""
+
+msgid "% Target Met"
+msgstr ""
+
+msgid "Status: "
+msgstr ""
+
+msgid "You do not have permission to create/edit events"
+msgstr ""
+
+msgid "You do not have permission to replace case data"
+msgstr ""
+
+msgid "You do not have permission to create/edit IM team member assignments"
+msgstr ""
+
+msgid "You do not have permission to create/edit incident action plans"
+msgstr ""
+
+msgid "You do not have permission to create/edit incident response actions"
+msgstr ""
+
+msgid "You do not have permission to create/edit risk assessments"
+msgstr ""
+
+msgid "You do not have permission to create/edit this form"
+msgstr ""
+
+msgid "Active"
+msgstr ""
+
+msgid "Completed"
+msgstr ""
+
+msgid "Select duration"
+msgstr ""
+
+msgid "Duration"
+msgstr ""
+
+msgid "All public health events"
+msgstr ""
+
+msgid "7-1-7 performance"
+msgstr ""
+
+msgid "Performance overview"
+msgstr ""
+
+msgid "Are you sure you want to complete this alert? This cannot be undone."
+msgstr ""
+
+msgid "eIDSR Events Dashboard"
+msgstr ""
+
+msgid "Zebra Events Dashboard"
+msgstr ""
+
+msgid "events"
+msgstr ""
+
+msgid "Disease"
+msgstr ""
+
+msgid "Province"
+msgstr ""
+
+msgid "Confirmed disease"
+msgstr ""
+
+msgid "Suspected disease"
+msgstr ""
+
+msgid "District"
+msgstr ""
+
+msgid "Emergence Date"
+msgstr ""
+
+msgid "Detection Date"
+msgstr ""
+
+msgid "Notification Date"
+msgstr ""
+
+msgid "Response Date"
+msgstr ""
+
+msgid "Manager"
+msgstr ""
+
+msgid "Detect 7d"
+msgstr ""
+
+msgid "Notify 1d"
+msgstr ""
+
+msgid "Respond 7d"
+msgstr ""
+
+msgid "Incident Status"
+msgstr ""
+
+msgid "EMS Id"
+msgstr ""
+
+msgid "Outbreak Id"
+msgstr ""
+
+msgid "Event"
+msgstr ""
+
+msgid "Event Created Date"
+msgstr ""
+
+msgid "Cases"
+msgstr ""
+
+msgid "Deaths"
+msgstr ""
+
+msgid "ERA1"
+msgstr ""
+
+msgid "ERA2"
+msgstr ""
+
+msgid "ERA3"
+msgstr ""
+
+msgid "ERA4"
+msgstr ""
+
+msgid "ERA5"
+msgstr ""
+
+msgid "ERA6"
+msgstr ""
+
+msgid "ERA7"
+msgstr ""
+
+msgid "Complete event"
+msgstr ""
+
+msgid "Not now"
+msgstr ""
+
+msgid "Complete"
+msgstr ""
+
+msgid "Are you sure you want to complete this Event? This cannot be undone."
+msgstr ""
+
+msgid "Event Tracker"
+msgstr ""
+
+msgid "Associated District Events"
+msgstr ""
+
+msgid "Districts Affected"
+msgstr ""
+
+msgid "Select data source"
+msgstr ""
+
+msgid "Data Source"
+msgstr ""
+
+msgid "Risk Assessment"
+msgstr ""
+
+msgid "Risk Assessment Summary"
+msgstr ""
+
+msgid "Create Risk Assessment"
+msgstr ""
+
+msgid "Edit Risk Assessment"
+msgstr ""
+
+msgid "Risk assessment incomplete"
+msgstr ""
+
+msgid "Risks associated with this event have not yet been assessed."
+msgstr ""
+
+msgid "Risk Assessment Grade"
+msgstr ""
+
+msgid "Add new Grade"
+msgstr ""
+
+msgid "Risk Assessment History"
+msgstr ""
+
+msgid "Overview"
+msgstr ""
+
+msgid "Cases and Deaths"
+msgstr ""
+
+msgid "Overall Risk"
+msgstr ""
+
+msgid "National:"
+msgstr ""
+
+msgid "Regional:"
+msgstr ""
+
+msgid "Global:"
+msgstr ""
+
+msgid "Overall Confidence"
+msgstr ""
+
+msgid "Risk Assessment Date: "
+msgstr ""
+
+msgid "N/A"
+msgstr ""
+
+msgid ""
+"In order to add or replace cases, you need to download the current file and "
+"add the new ones."
+msgstr ""
+
+msgid "Please, download the template and add the required data."
+msgstr ""
+
+msgid "Disease Outbreak saved successfully"
+msgstr ""
+
+msgid "Disease outbreak case data saved successfully"
+msgstr ""
+
+msgid "Warning"
+msgstr ""
+
+msgid ""
+"You have uploaded a new data cases file. This action will replace the "
+"current data of this disease outbreak event with the data of the file. Are "
+"you sure you want to continue?"
+msgstr ""
+
+msgid "Resource saved successfully"
+msgstr ""
+
+msgid "Add another"
+msgstr ""
+
+msgid "Form cannot be loaded"
+msgstr ""
+
+msgid "Risk Assessment Grading saved successfully"
+msgstr ""
+
+msgid "Risk Assessment Summary saved successfully"
+msgstr ""
+
+msgid "Risk Assessment Questionnaire saved successfully"
+msgstr ""
+
+msgid "Incident Action Plan saved successfully"
+msgstr ""
+
+msgid "Incident Response Actions saved successfully"
+msgstr ""
+
+msgid "Incident Management Team Member saved successfully"
+msgstr ""
+
+msgid "Create an incident action plan"
+msgstr ""
+
+msgid "No plan has been created for this incident"
+msgstr ""
+
+msgid "Create IAP"
+msgstr ""
+
+msgid "Incident Action Plan"
+msgstr ""
+
+msgid "Team"
+msgstr ""
+
+msgid "Edit Team"
+msgstr ""
+
+msgid "Incident Management Team Builder"
+msgstr ""
+
+msgid "Edit Role"
+msgstr ""
+
+msgid "Assign Role"
+msgstr ""
+
+msgid "Delete Roles"
+msgstr ""
+
+msgid "Delete Role"
+msgstr ""
+
+msgid "Confirm deletion"
+msgstr ""
+
+msgid "Are you sure you want to delete these team roles?"
+msgstr ""
+
+msgid "Are you sure you want to delete this team role?"
+msgstr ""
+
+msgid ""
+"Are you sure you want to delete this resource? This action cannot be undone."
+msgstr ""
+
+msgid "Upload File"
+msgstr ""
+
+msgid "Resources"
+msgstr ""
+
+msgid "Response Documents"
+msgstr ""
+
+msgid "Templates"
+msgstr ""
+
+msgid "No resources created"
+msgstr ""
+
+msgid "You can upload a file to create a new resource"
+msgstr ""
+
+msgid "Contact admin to create resources"
+msgstr ""
+
+msgctxt "DATA"
+msgid "HISTORICAL_CASE"
+msgstr ""
+
+#~ msgid "List"
+#~ msgstr "Listar"
+
+#~ msgid "Back"
+#~ msgstr "Volver"
+
+#~ msgid "Help"
+#~ msgstr "Ayuda"
+
+#~ msgid "Hello {{name}}"
+#~ msgstr "Hola {{name}}"

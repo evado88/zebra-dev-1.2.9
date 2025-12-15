@@ -1,0 +1,1220 @@
+import { Maybe } from "../../utils/ts-utils";
+import { AnalyticsResponse, D2Api } from "../../types/d2-api";
+import { PerformanceOverviewRepository } from "../../domain/repositories/PerformanceOverviewRepository";
+import { apiToFuture, FutureData } from "../api-futures";
+import {
+    RTSL_ZEBRA_ALERTS_NATIONAL_DISEASE_OUTBREAK_EVENT_ID_TEA_ID,
+    RTSL_ZEBRA_ALERTS_PROGRAM_ID,
+    RTSL_ZEBRA_ALERTS_VERIFICATION_STATUS_ID,
+    RTSL_ZEBRA_ORG_UNIT_ID,
+    RTSL_ZEBRA_PROGRAM_ID,
+} from "./consts/DiseaseOutbreakConstants";
+import _ from "../../domain/entities/generic/Collection";
+import { Future } from "../../domain/entities/generic/Future";
+import {
+    EventTrackerCountDiseaseIndicator,
+    PerformanceOverviewDimensions,
+} from "./consts/PerformanceOverviewConstants";
+import moment from "moment";
+import {
+    DataSource,
+    DiseaseOutbreakEventBaseAttrs,
+} from "../../domain/entities/disease-outbreak-event/DiseaseOutbreakEvent";
+import { DataStoreClient } from "../DataStoreClient";
+import {
+    TotalCardCounts,
+    PerformanceOverviewMetrics,
+    DiseaseNames,
+    PerformanceMetrics717,
+    IncidentStatusFilter,
+    PerformanceMetrics717Key,
+    TotalPerformanceMetrics717,
+    PerformanceMetricsStatus,
+} from "../../domain/entities/disease-outbreak-event/PerformanceOverviewMetrics";
+import { Code, Id } from "../../domain/entities/Ref";
+import { OverviewCard } from "../../domain/entities/PerformanceOverview";
+import { assertOrError } from "./utils/AssertOrError";
+import {
+    getProgramIndicatorsFromDatastore,
+    ProgramIndicatorsDatastore,
+    ProgramIndicatorsDatastoreKey,
+} from "./common/getProgramIndicatorsFromDatastore";
+import { AlertsPerformanceOverviewMetrics } from "../../domain/entities/alert/AlertsPerformanceOverviewMetrics";
+import {
+    AlertsPerformanceOverviewDimensions,
+    AlertsPerformanceOverviewDimensionsKey,
+    AlertsPerformanceOverviewDimensionsValue,
+} from "./consts/AlertsPerformanceOverviewConstants";
+import { AlertDataSource } from "../../domain/entities/alert/Alert";
+import { orgUnitLevelTypeByLevelNumber } from "../../domain/entities/OrgUnit";
+import { VerificationStatus } from "../../domain/entities/alert/Alert";
+import _c from "../../domain/entities/generic/Collection";
+import { programStatusOptions } from "./utils/getAllTrackedEntities";
+
+const formatDate = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = ("0" + (date.getMonth() + 1)).slice(-2);
+    const day = ("0" + date.getDate()).slice(-2);
+    return `${year}-${month}-${day}`;
+};
+
+const DEFAULT_END_DATE: string = formatDate(new Date());
+const DEFAULT_START_DATE = "2000-01-01";
+
+const CASES_PROGRAM_EVENT_TRACKER_OVERVIEW_DATASTORE_KEY =
+    "cases-program-event-tracker-overview-ids";
+const NATIONAL_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY =
+    "national-717-performance-program-indicators";
+const EVENT_TRACKER_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY =
+    "event-tracker-717-performance-program-indicators";
+const ALERTS_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY =
+    "alerts-717-performance-program-indicators";
+const COMPLETED_ALERTS_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY =
+    "completed-alerts-717-performance-program-indicators";
+const TOTALS_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY =
+    "total-717-performance-program-indicators";
+const PERFORMANCE_OVERVIEW_DIMENSIONS_DATASTORE_KEY = "performance-overview-dimensions";
+const ALERTS_PERFORMANCE_OVERVIEW_DIMENSIONS_DATASTORE_KEY =
+    "alerts-performance-overview-dimensions";
+
+type EventTrackerOverviewInDataStore = {
+    key: string;
+    suspectedCasesId: Id;
+    confirmedCasesId: Id;
+    deathsId: Id;
+    probableCasesId: Id;
+    dataSource?: keyof typeof DataSource;
+};
+
+type IdValue = {
+    id: Id;
+    value: string;
+};
+
+type TotalPerformanceMetrics717Key = PerformanceMetrics717Key | "alerts-completed";
+
+export class PerformanceOverviewD2Repository implements PerformanceOverviewRepository {
+    constructor(private api: D2Api, private datastore: DataStoreClient) {}
+
+    getTotalCardCounts(
+        allProvincesIds: string[],
+        singleSelectFilters?: Record<string, string>,
+        multiSelectFilters?: Record<string, string[]>,
+        dateRangeFilter?: string[]
+    ): FutureData<TotalCardCounts[]> {
+        return getProgramIndicatorsFromDatastore(
+            this.datastore,
+            ProgramIndicatorsDatastoreKey.ActiveVerifiedAlerts
+        ).flatMap(activeVerifiedAlerts => {
+            const eventTrackerCountsIndicatorMap =
+                this.mapActiveVerfiedAlertsToEventTrackerCountIndicator(activeVerifiedAlerts);
+            return apiToFuture(
+                this.api.analytics.get({
+                    dimension: [
+                        `dx:${eventTrackerCountsIndicatorMap.map(({ id }) => id).join(";")}`,
+                        `ou:${
+                            multiSelectFilters && multiSelectFilters?.province?.length
+                                ? multiSelectFilters.province.join(";")
+                                : allProvincesIds.join(";")
+                        }`,
+                    ],
+                    startDate:
+                        dateRangeFilter?.length && dateRangeFilter[0]
+                            ? dateRangeFilter[0]
+                            : DEFAULT_START_DATE,
+                    endDate:
+                        dateRangeFilter?.length && dateRangeFilter[1]
+                            ? dateRangeFilter[1]
+                            : DEFAULT_END_DATE,
+                    includeMetadataDetails: true,
+                })
+            ).map(analyticsResponse => {
+                const totalCardCounts =
+                    this.mapAnalyticsRowsToTotalCardCounts(
+                        eventTrackerCountsIndicatorMap,
+                        analyticsResponse.rows,
+                        singleSelectFilters
+                    ) || [];
+
+                const uniqueTotalCardCounts = totalCardCounts.reduce((acc, totalCardCount) => {
+                    const existingEntry = acc[totalCardCount.name];
+
+                    if (existingEntry) {
+                        existingEntry.total += totalCardCount.total;
+                        acc[totalCardCount.name] = existingEntry;
+                    } else {
+                        acc[totalCardCount.name] = { ...totalCardCount };
+                    }
+                    return acc;
+                }, {} as Record<string, TotalCardCounts>);
+
+                return Object.values(uniqueTotalCardCounts);
+            });
+        });
+    }
+
+    mapActiveVerfiedAlertsToEventTrackerCountIndicator(
+        activeVerifiedAlerts: Maybe<ProgramIndicatorsDatastore[]>
+    ): EventTrackerCountDiseaseIndicator[] {
+        if (!activeVerifiedAlerts) return [];
+        return _(
+            activeVerifiedAlerts.map(activeVerified => {
+                if (activeVerified.disease === "ALL") return;
+
+                if (activeVerified.disease) {
+                    const eventTrackerCount: EventTrackerCountDiseaseIndicator = {
+                        id: activeVerified.id,
+                        type: "disease",
+                        name: activeVerified.disease as DiseaseNames,
+                        incidentStatus: activeVerified.incidentStatus as IncidentStatusFilter,
+                    };
+                    return eventTrackerCount;
+                }
+            })
+        )
+            .compact()
+            .value();
+    }
+
+    mapAnalyticsRowsToTotalCardCounts = (
+        eventTrackerCountsIndicatorMap: EventTrackerCountDiseaseIndicator[],
+        rowData: string[][],
+        filters?: Record<string, string>
+    ): TotalCardCounts[] => {
+        const counts: TotalCardCounts[] = _(
+            rowData.map(([id, _orgUnit, total]) => {
+                const indicator = eventTrackerCountsIndicatorMap.find(d => d.id === id);
+                if (!indicator || !total) {
+                    return null;
+                }
+
+                if (indicator.type === "disease") {
+                    const diseaseCount = {
+                        id: id,
+                        name: indicator.name,
+                        type: indicator.type,
+                        incidentStatus: indicator.incidentStatus,
+                        total: parseFloat(total),
+                    };
+                    return diseaseCount;
+                }
+            })
+        )
+            .compact()
+            .value();
+
+        const filteredCounts: TotalCardCounts[] = counts.filter(item => {
+            if (filters && Object.entries(filters).length) {
+                const matchesDisease =
+                    !filters.disease || (item.type === "disease" && item.name === filters.disease);
+                const matchesIncidentStatus = !filters.incidentStatus
+                    ? item.incidentStatus === "ALL"
+                    : item.incidentStatus === filters.incidentStatus;
+
+                return matchesDisease && matchesIncidentStatus;
+            }
+            return true;
+        });
+        return filteredCounts;
+    };
+
+    private getAnalyticsApi(caseId: string, startDate: string) {
+        return apiToFuture(
+            this.api.analytics.get({
+                dimension: [`dx:${caseId}`],
+                startDate: startDate,
+                endDate: DEFAULT_END_DATE,
+            })
+        );
+    }
+
+    private getEventTrackerOverviewIdsFromDatastore(
+        type: string,
+        dataSource: Maybe<DataSource>
+    ): FutureData<EventTrackerOverviewInDataStore> {
+        const datastoreKey = CASES_PROGRAM_EVENT_TRACKER_OVERVIEW_DATASTORE_KEY;
+
+        return this.datastore
+            .getObject<EventTrackerOverviewInDataStore[]>(datastoreKey)
+            .flatMap(nullableEventTrackerOverviewIds => {
+                return assertOrError(nullableEventTrackerOverviewIds, datastoreKey).flatMap(
+                    eventTrackerOverviewIds => {
+                        const currentEventTrackerOverviewId = eventTrackerOverviewIds?.find(
+                            indicator =>
+                                indicator.key === type &&
+                                (!dataSource || indicator.dataSource === dataSource)
+                        );
+
+                        if (!currentEventTrackerOverviewId)
+                            return Future.error(
+                                new Error(
+                                    `Event Tracker Overview Ids for type ${type} not found in datastore`
+                                )
+                            );
+                        return Future.success({
+                            ...currentEventTrackerOverviewId,
+                        });
+                    }
+                );
+            });
+    }
+
+    private getAllEventTrackerOverviewIdsFromDatastore(): FutureData<
+        EventTrackerOverviewInDataStore[]
+    > {
+        return this.datastore
+            .getObject<EventTrackerOverviewInDataStore[]>(
+                CASES_PROGRAM_EVENT_TRACKER_OVERVIEW_DATASTORE_KEY
+            )
+            .flatMap(casesEventTrackerOverviewIdsResponse => {
+                return assertOrError(
+                    casesEventTrackerOverviewIdsResponse,
+                    CASES_PROGRAM_EVENT_TRACKER_OVERVIEW_DATASTORE_KEY
+                ).map(casesEventTrackerOverviewIds => {
+                    return casesEventTrackerOverviewIds.map(
+                        ({
+                            key,
+                            suspectedCasesId,
+                            confirmedCasesId,
+                            deathsId,
+                            probableCasesId,
+                            dataSource,
+                        }) => ({
+                            key,
+                            suspectedCasesId,
+                            confirmedCasesId,
+                            deathsId,
+                            probableCasesId,
+                            dataSource,
+                        })
+                    );
+                });
+            });
+    }
+
+    getEventTrackerOverviewMetrics(
+        type: string,
+        dataSource?: DataSource
+    ): FutureData<OverviewCard[]> {
+        return this.getEventTrackerOverviewIdsFromDatastore(type, dataSource).flatMap(
+            eventTrackerOverview => {
+                const { suspectedCasesId, probableCasesId, confirmedCasesId, deathsId } =
+                    eventTrackerOverview;
+
+                const sevenDaysAgo = new Date();
+                sevenDaysAgo.setDate(new Date().getDate() - 7);
+
+                return Future.joinObj(
+                    {
+                        cumulativeSuspectedCases: this.getAnalyticsApi(
+                            suspectedCasesId,
+                            DEFAULT_START_DATE
+                        ),
+                        newSuspectedCases: this.getAnalyticsApi(
+                            suspectedCasesId,
+                            formatDate(sevenDaysAgo)
+                        ),
+                        cumulativeProbableCases: this.getAnalyticsApi(
+                            probableCasesId,
+                            DEFAULT_START_DATE
+                        ),
+                        newProbableCases: this.getAnalyticsApi(
+                            probableCasesId,
+                            formatDate(sevenDaysAgo)
+                        ),
+                        cumulativeConfirmedCases: this.getAnalyticsApi(
+                            confirmedCasesId,
+                            DEFAULT_START_DATE
+                        ),
+                        newConfirmedCases: this.getAnalyticsApi(
+                            confirmedCasesId,
+                            formatDate(sevenDaysAgo)
+                        ),
+                        cumulativeDeaths: this.getAnalyticsApi(deathsId, DEFAULT_START_DATE),
+                        newDeaths: this.getAnalyticsApi(deathsId, formatDate(sevenDaysAgo)),
+                    },
+                    { concurrency: 5 }
+                ).flatMap(
+                    ({
+                        cumulativeSuspectedCases,
+                        newSuspectedCases,
+                        cumulativeProbableCases,
+                        newProbableCases,
+                        cumulativeConfirmedCases,
+                        newConfirmedCases,
+                        cumulativeDeaths,
+                        newDeaths,
+                    }) => {
+                        return Future.success([
+                            {
+                                name: "New Suspected Cases",
+                                value: newSuspectedCases?.rows[0]?.[1]
+                                    ? parseInt(newSuspectedCases?.rows[0]?.[1])
+                                    : 0,
+                            },
+                            {
+                                name: "New Probable Cases",
+                                value: newProbableCases?.rows[0]?.[1]
+                                    ? parseInt(newProbableCases?.rows[0]?.[1])
+                                    : 0,
+                            },
+                            {
+                                name: "New Confirmed Cases",
+                                value: newConfirmedCases?.rows[0]?.[1]
+                                    ? parseInt(newConfirmedCases?.rows[0]?.[1])
+                                    : 0,
+                            },
+                            {
+                                name: "New Deaths",
+                                value: newDeaths?.rows[0]?.[1]
+                                    ? parseInt(newDeaths?.rows[0]?.[1])
+                                    : 0,
+                            },
+                            {
+                                name: "Cumulative Suspected Cases",
+                                value: cumulativeSuspectedCases?.rows[0]?.[1]
+                                    ? parseInt(cumulativeSuspectedCases?.rows[0]?.[1])
+                                    : 0,
+                            },
+                            {
+                                name: "Cumulative Probable Cases",
+                                value: cumulativeProbableCases?.rows[0]?.[1]
+                                    ? parseInt(cumulativeProbableCases?.rows[0]?.[1])
+                                    : 0,
+                            },
+                            {
+                                name: "Cumulative Confirmed Cases",
+                                value: cumulativeConfirmedCases?.rows[0]?.[1]
+                                    ? parseInt(cumulativeConfirmedCases?.rows[0]?.[1])
+                                    : 0,
+                            },
+                            {
+                                name: "Cumulative Deaths",
+                                value: cumulativeDeaths?.rows[0]?.[1]
+                                    ? parseInt(cumulativeDeaths?.rows[0]?.[1])
+                                    : 0,
+                            },
+                        ]);
+                    }
+                );
+            }
+        );
+    }
+
+    getNationalPerformanceOverviewMetrics(
+        diseaseOutbreakEvents: DiseaseOutbreakEventBaseAttrs[]
+    ): FutureData<PerformanceOverviewMetrics[]> {
+        return this.datastore
+            .getObject<PerformanceOverviewDimensions>(PERFORMANCE_OVERVIEW_DIMENSIONS_DATASTORE_KEY)
+            .flatMap(nullablePerformanceOverviewDimensions => {
+                return assertOrError(
+                    nullablePerformanceOverviewDimensions,
+                    PERFORMANCE_OVERVIEW_DIMENSIONS_DATASTORE_KEY
+                ).flatMap(performanceOverviewDimensions => {
+                    return apiToFuture(
+                        this.api.get<AnalyticsResponse>(
+                            `/analytics/enrollments/query/${RTSL_ZEBRA_PROGRAM_ID}`,
+                            {
+                                dimension: [
+                                    performanceOverviewDimensions.suspectedDisease,
+                                    performanceOverviewDimensions.event,
+                                    performanceOverviewDimensions.era1ProgramIndicator,
+                                    performanceOverviewDimensions.era2ProgramIndicator,
+                                    performanceOverviewDimensions.era3ProgramIndicator,
+                                    performanceOverviewDimensions.era4ProgramIndicator,
+                                    performanceOverviewDimensions.era5ProgramIndicator,
+                                    performanceOverviewDimensions.era6ProgramIndicator,
+                                    performanceOverviewDimensions.era7ProgramIndicator,
+                                    performanceOverviewDimensions.detect7dProgramIndicator,
+                                    performanceOverviewDimensions.notify1dProgramIndicator,
+                                    performanceOverviewDimensions.respond7dProgramIndicator,
+                                ],
+                                startDate: DEFAULT_START_DATE,
+                                endDate: DEFAULT_END_DATE,
+                                paging: false,
+                                programStatus: programStatusOptions.ACTIVE,
+                            }
+                        )
+                    ).flatMap(indicatorsProgramFuture => {
+                        return this.getAllEventTrackerOverviewIdsFromDatastore().flatMap(
+                            eventTrackerOverviews => {
+                                const mappedIndicators =
+                                    indicatorsProgramFuture?.rows.map((row: string[]) =>
+                                        this.mapRowToBaseIndicator(
+                                            row,
+                                            indicatorsProgramFuture.headers,
+                                            indicatorsProgramFuture.metaData,
+                                            performanceOverviewDimensions
+                                        )
+                                    ) || [];
+
+                                const diseaseOutbreakEventsMap = _c(diseaseOutbreakEvents).keyBy(
+                                    diseaseOutbreakEvent =>
+                                        diseaseOutbreakEvent.suspectedDiseaseCode
+                                );
+
+                                const eventTrackerOverviewsForKeys = eventTrackerOverviews.filter(
+                                    overview => {
+                                        const event = diseaseOutbreakEventsMap.get(overview.key);
+                                        return (
+                                            !!event && !!event.dataSource === !!overview.dataSource
+                                        );
+                                    }
+                                );
+
+                                const casesIndicatorIds = eventTrackerOverviewsForKeys.map(
+                                    overview => overview.suspectedCasesId
+                                );
+
+                                const deathsIndicatorIds = eventTrackerOverviewsForKeys.map(
+                                    overview => overview.deathsId
+                                );
+                                return Future.joinObj({
+                                    allCases: this.getAnalyticsByIndicators(casesIndicatorIds),
+                                    allDeaths: this.getAnalyticsByIndicators(deathsIndicatorIds),
+                                }).flatMap(({ allCases, allDeaths }) => {
+                                    const performanceOverviewMetrics: FutureData<PerformanceOverviewMetrics>[] =
+                                        diseaseOutbreakEvents.map(event => {
+                                            const baseIndicator = mappedIndicators.find(
+                                                indicator => indicator.id === event.id
+                                            );
+
+                                            const key = event.suspectedDiseaseCode;
+                                            if (!key)
+                                                return Future.error(
+                                                    new Error(
+                                                        `No suspected disease found for event : ${event.id}`
+                                                    )
+                                                );
+
+                                            const casesAndDeaths =
+                                                this.getCasesAndDeathsFromBothDataSourcesByDisease(
+                                                    key,
+                                                    eventTrackerOverviewsForKeys,
+                                                    allCases,
+                                                    allDeaths
+                                                );
+
+                                            //TODO: 8698prv94 - replace with correct
+                                            const duration = `${moment()
+                                                .startOf("day")
+                                                .diff(moment(event.created).startOf("day"), "days")
+                                                .toString()}d`;
+
+                                            if (!baseIndicator) {
+                                                const metrics = {
+                                                    id: event.id,
+                                                    event: event.name,
+                                                    incidentManagerUsername:
+                                                        event.incidentManagerName,
+                                                    duration: duration,
+                                                    cases:
+                                                        String(casesAndDeaths.currentCases) || "",
+                                                    deaths:
+                                                        String(casesAndDeaths.currentDeaths) || "",
+                                                } as PerformanceOverviewMetrics;
+                                                return Future.success(metrics);
+                                            } else {
+                                                const metrics = {
+                                                    ...baseIndicator,
+                                                    incidentManagerUsername:
+                                                        event.incidentManagerName,
+                                                    duration: duration,
+                                                    cases:
+                                                        String(casesAndDeaths.currentCases) || "",
+                                                    deaths:
+                                                        String(casesAndDeaths.currentDeaths) || "",
+                                                } as PerformanceOverviewMetrics;
+                                                return Future.success(metrics);
+                                            }
+                                        });
+
+                                    return Future.sequential(performanceOverviewMetrics);
+                                });
+                            }
+                        );
+                    });
+                });
+            });
+    }
+
+    private getCasesAndDeathsFromBothDataSourcesByDisease(
+        diseaseCode: Code,
+        eventTrackerOverviewsForKeys: EventTrackerOverviewInDataStore[],
+        allCases: IdValue[],
+        allDeaths: IdValue[]
+    ): {
+        currentCases: number;
+        currentDeaths: number;
+    } {
+        const currentEventTrackerOverviews = eventTrackerOverviewsForKeys.filter(
+            overview => overview.key === diseaseCode
+        );
+
+        const allSuspectedCasesIds = new Set(
+            currentEventTrackerOverviews.map(overview => overview.suspectedCasesId)
+        );
+
+        const allDeathsIds = new Set(
+            currentEventTrackerOverviews.map(overview => overview.deathsId)
+        );
+
+        const currentCases = allCases.filter(caseIdValue =>
+            allSuspectedCasesIds.has(caseIdValue.id)
+        );
+
+        const currentDeaths = allDeaths.filter(death => allDeathsIds.has(death.id));
+
+        const sumValues = (currentValues: IdValue[]) =>
+            currentValues.reduce((acc, curr) => {
+                const number = Number.isFinite(Number(curr.value)) ? Number(curr.value) : 0;
+                return acc + number;
+            }, 0);
+
+        const sumCurrentCases = sumValues(currentCases);
+
+        const sumCurrentDeaths = sumValues(currentDeaths);
+
+        return {
+            currentCases: sumCurrentCases,
+            currentDeaths: sumCurrentDeaths,
+        };
+    }
+
+    getAlertsPerformanceOverviewMetrics(): FutureData<AlertsPerformanceOverviewMetrics[]> {
+        return this.getAlertsPerformanceData({
+            filter: `${RTSL_ZEBRA_ALERTS_VERIFICATION_STATUS_ID}:eq:${VerificationStatus.RTSL_ZEB_AL_OS_VERIFICATION_VERIFIED}`,
+        });
+    }
+
+    getMappedAlerts(diseaseOutbreakId: Id): FutureData<AlertsPerformanceOverviewMetrics[]> {
+        return this.getAlertsPerformanceData({
+            filter: `${RTSL_ZEBRA_ALERTS_NATIONAL_DISEASE_OUTBREAK_EVENT_ID_TEA_ID}:eq:${diseaseOutbreakId}`,
+        });
+    }
+
+    private getAlertsPerformanceData(options: {
+        filter: string;
+    }): FutureData<AlertsPerformanceOverviewMetrics[]> {
+        return this.datastore
+            .getObject<AlertsPerformanceOverviewDimensions>(
+                ALERTS_PERFORMANCE_OVERVIEW_DIMENSIONS_DATASTORE_KEY
+            )
+            .flatMap(nullablePerformanceOverviewDimensions => {
+                return assertOrError(
+                    nullablePerformanceOverviewDimensions,
+                    ALERTS_PERFORMANCE_OVERVIEW_DIMENSIONS_DATASTORE_KEY
+                ).flatMap(performanceOverviewDimensions => {
+                    return apiToFuture(
+                        this.api.get<AnalyticsResponse>(
+                            `/analytics/enrollments/query/${RTSL_ZEBRA_ALERTS_PROGRAM_ID}`,
+                            {
+                                dimension: [
+                                    performanceOverviewDimensions.eventEBSId,
+                                    performanceOverviewDimensions.eventIBSId,
+                                    performanceOverviewDimensions.nationalDiseaseOutbreakEventId,
+                                    performanceOverviewDimensions.suspectedDisease,
+                                    performanceOverviewDimensions.confirmedDisease,
+                                    performanceOverviewDimensions.cases, // cases is not shown in table as now cases data comes from Cases program
+                                    performanceOverviewDimensions.deaths, // deaths is not shown in table as now cases data comes from Cases program
+                                    performanceOverviewDimensions.notify1d,
+                                    performanceOverviewDimensions.detect7d,
+                                    performanceOverviewDimensions.incidentManager,
+                                    performanceOverviewDimensions.respond7d,
+                                    performanceOverviewDimensions.incidentStatus, // PHEOC status
+                                    performanceOverviewDimensions.emergedDate,
+                                    performanceOverviewDimensions.detectionDate,
+                                    performanceOverviewDimensions.notifiedDate,
+                                    performanceOverviewDimensions.respondedDate,
+                                    performanceOverviewDimensions.detectedDate,
+                                ],
+                                startDate: DEFAULT_START_DATE,
+                                endDate: DEFAULT_END_DATE,
+                                paging: false,
+                                programStatus: programStatusOptions.ACTIVE,
+                                filter: options.filter,
+                            }
+                        )
+                    ).flatMap(response => {
+                        const mappedIndicators: AlertsPerformanceOverviewMetrics[] = response.rows
+                            .map((row: string[]) => {
+                                return Object.keys(performanceOverviewDimensions).reduce(
+                                    (acc, dimensionKey) => {
+                                        const dimension: AlertsPerformanceOverviewDimensionsValue =
+                                            performanceOverviewDimensions[
+                                                dimensionKey as AlertsPerformanceOverviewDimensionsKey
+                                            ];
+
+                                        const index = response.headers.findIndex(
+                                            header => header.name === dimension
+                                        );
+
+                                        if (dimension === "enrollmentdate") {
+                                            const inputDate = row[index];
+                                            const formattedDate = inputDate?.split(" ")[0]; // YYYY-MM-DD
+                                            return {
+                                                ...acc,
+                                                [dimensionKey]: formattedDate,
+                                            };
+                                        } else if (
+                                            [
+                                                "emergedDate",
+                                                "notifiedDate",
+                                                "respondedDate",
+                                                "detectionDate",
+                                            ].includes(dimensionKey)
+                                        ) {
+                                            const inputDate = row[index];
+
+                                            return {
+                                                ...acc,
+                                                [dimensionKey]: inputDate,
+                                            };
+                                        } else if (dimension === "ounamehierarchy") {
+                                            const hierarchyArray = row[index]?.split("/");
+                                            return {
+                                                ...acc,
+                                                province:
+                                                    (hierarchyArray && hierarchyArray.length > 1
+                                                        ? hierarchyArray[1]
+                                                        : row[index]) || "",
+                                                orgUnitType:
+                                                    hierarchyArray && hierarchyArray.length > 0
+                                                        ? orgUnitLevelTypeByLevelNumber[
+                                                              hierarchyArray.length
+                                                          ] || "National"
+                                                        : "National",
+                                            };
+                                        } else if (
+                                            dimensionKey === "detect7d" ||
+                                            dimensionKey === "notify1d" ||
+                                            dimensionKey === "respond7d"
+                                        ) {
+                                            return {
+                                                ...acc,
+                                                [dimensionKey]: this.getDetect7dNotify1dOrRespond7d(
+                                                    {
+                                                        dimensionKey,
+                                                        row,
+                                                        performanceOverviewDimensions,
+                                                        headers: response.headers,
+                                                    }
+                                                ),
+                                            };
+                                        } else {
+                                            const nameValue = Object.values(
+                                                response.metaData.items
+                                            ).find(item => item.code === row[index])?.name;
+                                            // TODO: Check why name instead of code. Name is only needed in presentation layer but for filters we should use code
+                                            return {
+                                                ...acc,
+                                                [dimensionKey]: nameValue || row[index],
+                                            };
+                                        }
+                                    },
+                                    {} as Omit<AlertsPerformanceOverviewMetrics, "eventSource">
+                                );
+                            })
+                            .map(metrics => ({
+                                ...metrics,
+                                eventSource: metrics.eventEBSId
+                                    ? AlertDataSource.RTSL_ZEB_OS_DATA_SOURCE_EBS
+                                    : AlertDataSource.RTSL_ZEB_OS_DATA_SOURCE_IBS,
+                            }));
+
+                        return Future.success(mappedIndicators);
+                    });
+                });
+            });
+    }
+
+    private getDetect7dNotify1dOrRespond7d(params: {
+        dimensionKey: "detect7d" | "notify1d" | "respond7d";
+        headers: { name: string; column: string }[];
+        performanceOverviewDimensions: AlertsPerformanceOverviewDimensions;
+        row: string[];
+    }): string {
+        const { dimensionKey, row, performanceOverviewDimensions, headers } = params;
+
+        const hasNeededDates = this.checkDetect7dNotify1dOrRespond7dDates(params);
+
+        if (hasNeededDates) {
+            const dimension: AlertsPerformanceOverviewDimensionsValue =
+                performanceOverviewDimensions[dimensionKey];
+
+            const index = headers.findIndex(header => header.name === dimension);
+
+            return row[index] || "";
+        } else {
+            return "";
+        }
+    }
+
+    private checkDetect7dNotify1dOrRespond7dDates(params: {
+        dimensionKey: "detect7d" | "notify1d" | "respond7d";
+        headers: { name: string; column: string }[];
+        performanceOverviewDimensions: AlertsPerformanceOverviewDimensions;
+        row: string[];
+    }): boolean {
+        const { dimensionKey, row, performanceOverviewDimensions, headers } = params;
+
+        const emergedDateDimension: AlertsPerformanceOverviewDimensionsValue =
+            performanceOverviewDimensions.emergedDate;
+        const notifiedDateDimension: AlertsPerformanceOverviewDimensionsValue =
+            performanceOverviewDimensions.notifiedDate;
+        const respondedDateDimension: AlertsPerformanceOverviewDimensionsValue =
+            performanceOverviewDimensions.respondedDate;
+        const detectedDateDimension: AlertsPerformanceOverviewDimensionsValue =
+            performanceOverviewDimensions.detectedDate;
+
+        const emergedDateIndex = headers.findIndex(header => header.name === emergedDateDimension);
+        const notifiedDateIndex = headers.findIndex(
+            header => header.name === notifiedDateDimension
+        );
+        const respondedDateIndex = headers.findIndex(
+            header => header.name === respondedDateDimension
+        );
+        const detectedDateIndex = headers.findIndex(
+            header => header.name === detectedDateDimension
+        );
+
+        switch (dimensionKey) {
+            case "detect7d":
+                return !!row[emergedDateIndex] && !!row[detectedDateIndex];
+            case "notify1d":
+                return !!row[detectedDateIndex] && !!row[notifiedDateIndex];
+            case "respond7d":
+                return !!row[respondedDateIndex] && !!row[notifiedDateIndex];
+            default:
+                return false;
+        }
+    }
+
+    private getAnalyticsByIndicators(ids: Id[]): FutureData<IdValue[]> {
+        return apiToFuture(
+            this.api.analytics.get({
+                dimension: [`dx:${ids.join(";")}`],
+                startDate: DEFAULT_START_DATE,
+                endDate: DEFAULT_END_DATE,
+                includeMetadataDetails: true,
+            })
+        ).flatMap(response => {
+            const analytics = _(
+                response.rows.map(row => {
+                    if (row[0] && row[1]) return { id: row[0], value: parseInt(row[1]).toString() };
+                })
+            )
+                .compact()
+                .value();
+            return Future.success(analytics);
+        });
+    }
+
+    private mapIndicatorsTo717PerformanceMetrics(
+        performanceMetric717Response: string[][],
+        metricIdList: PerformanceMetrics717[],
+        totalPerformance717ProgramIndicator?: TotalPerformanceMetrics717
+    ): PerformanceMetrics717[] {
+        const totalIndicatorValue = performanceMetric717Response.find(
+            ([id]) => id === totalPerformance717ProgramIndicator?.id
+        )?.[1];
+
+        return _(
+            performanceMetric717Response
+                .filter(([id]) => totalPerformance717ProgramIndicator?.id !== id)
+                .map(([id, value]) => {
+                    const indicator = metricIdList.find(d => d.id === id);
+
+                    if (!indicator) throw new Error(`Unknown Indicator with id ${id} `);
+
+                    return {
+                        ...indicator,
+                        value: value ? parseFloat(value) : ("Inc" as const),
+                        type: indicator.type,
+                        total: totalIndicatorValue ? parseFloat(totalIndicatorValue) : undefined,
+                    };
+                })
+        )
+            .compact()
+            .value();
+    }
+
+    getNational717Performance(): FutureData<PerformanceMetrics717[]> {
+        return this.get717PerformanceIndicators("national").flatMap(
+            performance717ProgramIndicators => {
+                const performance717ProgramIndicatorsNumbers =
+                    performance717ProgramIndicators.filter(({ type }) => type === "secondary");
+
+                return apiToFuture(
+                    this.api.get<AnalyticsEnrollmentsResponse>(
+                        `/analytics/enrollments/query/${RTSL_ZEBRA_PROGRAM_ID}`,
+                        {
+                            dimension: [
+                                ...performance717ProgramIndicatorsNumbers.map(({ id }) => id),
+                                `ou:${RTSL_ZEBRA_ORG_UNIT_ID}`,
+                            ],
+                            startDate: DEFAULT_START_DATE,
+                            endDate: DEFAULT_END_DATE,
+                            includeMetadataDetails: true,
+                            ouMode: "SELECTED",
+                            paging: false,
+                            programStatus: programStatusOptions.ACTIVE,
+                        }
+                    )
+                ).map(res => {
+                    const filteredRowsByZebraOrgUnit = res.rows.filter(row => {
+                        const orgUnitIndex = res.headers.findIndex(header => header.name === "ou");
+                        return row[orgUnitIndex] === RTSL_ZEBRA_ORG_UNIT_ID;
+                    });
+
+                    const totalEnrollmentsValue = filteredRowsByZebraOrgUnit.length;
+
+                    return performance717ProgramIndicatorsNumbers.reduce(
+                        (
+                            acc: PerformanceMetrics717[],
+                            performance717ProgramIndicator: PerformanceMetrics717
+                        ): PerformanceMetrics717[] => {
+                            const programIndicatorId = performance717ProgramIndicator.id;
+                            const programIndicatorIdIndex = res.headers.findIndex(
+                                header => header.name === programIndicatorId
+                            );
+                            const sumOfProgramIndicatorValue = filteredRowsByZebraOrgUnit.reduce(
+                                (sum, row) => {
+                                    const numberValue = Number(row[programIndicatorIdIndex] || "0");
+                                    return isNaN(numberValue) ? sum : sum + numberValue;
+                                },
+                                0
+                            );
+
+                            const percentageValue =
+                                sumOfProgramIndicatorValue !== 0
+                                    ? (sumOfProgramIndicatorValue / totalEnrollmentsValue) * 100
+                                    : 0;
+
+                            return [
+                                ...acc,
+                                {
+                                    ...performance717ProgramIndicator,
+                                    id: `${performance717ProgramIndicator.id}-primary`,
+                                    type: "primary",
+                                    value: percentageValue,
+                                    total: totalEnrollmentsValue,
+                                },
+                                {
+                                    ...performance717ProgramIndicator,
+                                    id: `${performance717ProgramIndicator.id}-secondary`,
+                                    type: "secondary",
+                                    value: sumOfProgramIndicatorValue,
+                                    total: totalEnrollmentsValue,
+                                },
+                            ];
+                        },
+                        []
+                    );
+                });
+            }
+        );
+    }
+
+    getAlerts717Performance(
+        performanceMetricsStatus: PerformanceMetricsStatus,
+        diseaseName: Maybe<DiseaseNames>
+    ): FutureData<PerformanceMetrics717[]> {
+        const totalPerformanceKey =
+            performanceMetricsStatus === "active" ? "alerts" : "alerts-completed";
+
+        return Future.joinObj({
+            performance717ProgramIndicators: this.get717PerformanceIndicators(
+                "alerts",
+                performanceMetricsStatus
+            ),
+            totalPerformance717ProgramIndicator: this.getTotalPerformance717ProgramIndicator(
+                totalPerformanceKey,
+                diseaseName
+            ),
+        }).flatMap(({ performance717ProgramIndicators, totalPerformance717ProgramIndicator }) => {
+            const filteredProgramIndicators = diseaseName
+                ? performance717ProgramIndicators.filter(
+                      indicator => indicator.disease === diseaseName
+                  )
+                : performance717ProgramIndicators.filter(indicator => !indicator.disease);
+            const performance717ProgramIndicatorIds = [
+                ...filteredProgramIndicators.map(({ id }) => id),
+                totalPerformance717ProgramIndicator?.id,
+            ];
+
+            return apiToFuture(
+                this.api.analytics.get({
+                    dimension: [`dx:${performance717ProgramIndicatorIds.join(";")}`],
+                    startDate: DEFAULT_START_DATE,
+                    endDate: DEFAULT_END_DATE,
+                    includeMetadataDetails: true,
+                })
+            ).map(res => {
+                const performanceMetrics = this.mapIndicatorsTo717PerformanceMetrics(
+                    res.rows,
+                    performance717ProgramIndicators,
+                    totalPerformance717ProgramIndicator
+                );
+                if (!diseaseName) return performanceMetrics;
+
+                const secondaryDiseaseMetrics = performanceMetrics.filter(
+                    metric => metric.type === "secondary" && metric.disease === diseaseName
+                );
+                const primaryDiseaseMetrics = secondaryDiseaseMetrics.map<PerformanceMetrics717>(
+                    metric => ({
+                        ...metric,
+                        type: "primary",
+                        value: calculatePrimaryDiseaseValueFromSecondaryValue(metric),
+                    })
+                );
+
+                return [...primaryDiseaseMetrics, ...secondaryDiseaseMetrics];
+            });
+        });
+    }
+
+    getEvent717Performance(diseaseOutbreakEventId: Id): FutureData<PerformanceMetrics717[]> {
+        return this.get717PerformanceIndicators("event").flatMap(
+            performance717ProgramIndicators => {
+                return apiToFuture(
+                    this.api.get<AnalyticsResponse>(
+                        `/analytics/enrollments/query/${RTSL_ZEBRA_PROGRAM_ID}`,
+                        {
+                            dimension: [...performance717ProgramIndicators.map(({ id }) => id)],
+                            startDate: DEFAULT_START_DATE,
+                            endDate: DEFAULT_END_DATE,
+                            paging: false,
+                            programStatus: programStatusOptions.ACTIVE,
+                        }
+                    )
+                ).flatMap(response => {
+                    const filteredRow = filterAnalyticsEnrollmentDataByDiseaseOutbreakEvent(
+                        diseaseOutbreakEventId,
+                        response.rows,
+                        response.headers
+                    );
+
+                    if (!filteredRow)
+                        return Future.error(
+                            new Error("No data found for event tracker 7-1-7 performance")
+                        );
+
+                    const mappedIndicatorsToRows: string[][] = performance717ProgramIndicators.map(
+                        ({ id }) => {
+                            return [
+                                id,
+                                filteredRow[
+                                    response.headers.findIndex(header => header.name === id)
+                                ] || "",
+                            ];
+                        }
+                    );
+
+                    return Future.success(
+                        this.mapIndicatorsTo717PerformanceMetrics(
+                            mappedIndicatorsToRows,
+                            performance717ProgramIndicators
+                        )
+                    );
+                });
+            }
+        );
+    }
+
+    private get717PerformanceIndicators(
+        key: PerformanceMetrics717Key,
+        performanceMetricsStatus?: PerformanceMetricsStatus
+    ): FutureData<PerformanceMetrics717[]> {
+        const datastoreKey = {
+            national: NATIONAL_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY,
+            alerts:
+                performanceMetricsStatus === "active"
+                    ? ALERTS_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY
+                    : COMPLETED_ALERTS_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY,
+            event: EVENT_TRACKER_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY,
+        }[key];
+        return this.datastore
+            .getObject<PerformanceMetrics717[]>(datastoreKey)
+            .flatMap(nullable717PerformanceProgramIndicators => {
+                return assertOrError(nullable717PerformanceProgramIndicators, datastoreKey).flatMap(
+                    performance717ProgramIndicators => {
+                        return Future.success(performance717ProgramIndicators);
+                    }
+                );
+            });
+    }
+
+    private getTotalPerformance717ProgramIndicator(
+        key: TotalPerformanceMetrics717Key,
+        diseaseName?: Maybe<DiseaseNames>
+    ): FutureData<Maybe<TotalPerformanceMetrics717>> {
+        return this.datastore
+            .getObject<TotalPerformanceMetrics717[]>(
+                TOTALS_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY
+            )
+            .flatMap(nullable717TotalPerformanceIndicators => {
+                return assertOrError(
+                    nullable717TotalPerformanceIndicators,
+                    TOTALS_PERFORMANCE_717_PROGRAM_INDICATORS_DATASTORE_KEY
+                ).flatMap(performance717Indicators => {
+                    return Future.success(
+                        performance717Indicators.find(indicator => {
+                            const hasDiseaseName = indicator.disease
+                                ? indicator.disease === diseaseName
+                                : !diseaseName;
+                            return indicator.key === key && hasDiseaseName;
+                        })
+                    );
+                });
+            });
+    }
+
+    private mapRowToBaseIndicator(
+        row: string[],
+        headers: { name: string; column: string }[],
+        metaData: AnalyticsResponse["metaData"],
+        performanceOverviewDimensions: PerformanceOverviewDimensions
+    ): Partial<PerformanceOverviewMetrics> {
+        return headers.reduce(
+            (
+                acc: Partial<PerformanceOverviewMetrics>,
+                header,
+                index
+            ): Partial<PerformanceOverviewMetrics> => {
+                const key = Object.keys(performanceOverviewDimensions).find(
+                    key =>
+                        performanceOverviewDimensions[
+                            key as keyof PerformanceOverviewDimensions
+                        ] === header.name
+                ) as Maybe<keyof PerformanceOverviewDimensions>;
+
+                if (!key) return acc;
+
+                switch (key) {
+                    case "suspectedDisease":
+                        acc.suspectedDisease =
+                            ((
+                                Object.values(metaData.items).find(
+                                    item => (item as any).code === row[index]
+                                ) as any
+                            )?.name as DiseaseNames) || "";
+                        break;
+
+                    case "teiId":
+                        acc.id = row[index];
+                        break;
+
+                    case "era1ProgramIndicator":
+                        acc.era1 = row[index];
+                        break;
+
+                    case "era2ProgramIndicator":
+                        acc.era2 = row[index];
+                        break;
+
+                    case "era3ProgramIndicator":
+                        acc.era3 = row[index];
+                        break;
+
+                    case "era4ProgramIndicator":
+                        acc.era4 = row[index];
+                        break;
+
+                    case "era5ProgramIndicator":
+                        acc.era5 = row[index];
+                        break;
+
+                    case "era6ProgramIndicator":
+                        acc.era6 = row[index];
+                        break;
+
+                    case "era7ProgramIndicator":
+                        acc.era7 = row[index];
+                        break;
+
+                    case "date": {
+                        const inputDate = row[index];
+                        const formattedDate = inputDate?.split(" ")[0]; // YYYY-MM-DD
+                        acc.date = formattedDate;
+                        break;
+                    }
+
+                    case "notify1dProgramIndicator":
+                        acc.notify1d = row[index];
+                        break;
+
+                    case "respond7dProgramIndicator":
+                        acc.respond7d = row[index];
+                        break;
+
+                    case "detect7dProgramIndicator":
+                        acc.detect7d = row[index];
+                        break;
+
+                    default:
+                        acc[key] = row[index];
+                        break;
+                }
+
+                return acc;
+            },
+            {}
+        );
+    }
+}
+
+function calculatePrimaryDiseaseValueFromSecondaryValue(
+    metric: PerformanceMetrics717
+): number | "Inc" {
+    return metric.value !== undefined && metric.total && metric.value !== "Inc"
+        ? parseFloat((metric.value / metric.total).toFixed(2)) * 100
+        : "Inc";
+}
+
+function filterAnalyticsEnrollmentDataByDiseaseOutbreakEvent(
+    diseaseOutbreakEventId: Id,
+    rows: string[][],
+    headers: { name: string; column: string }[]
+): string[] | undefined {
+    const filteredRows = rows.filter(row => {
+        const teiId = row[headers.findIndex(header => header.name === "tei")];
+        return teiId === diseaseOutbreakEventId;
+    })[0];
+
+    return filteredRows;
+}
+
+type AnalyticsEnrollmentsResponse = {
+    headers: Array<{
+        name: string;
+        column: "Data";
+        valueType: "TEXT" | "NUMBER";
+        type: "java.lang.String" | "java.lang.Double";
+        hidden: boolean;
+        meta: boolean;
+    }>;
+    metaData:
+        | Record<string, never>
+        | {
+              dimensions: Record<string, string[]>;
+              items: Record<
+                  string,
+                  {
+                      name: string;
+                      uid?: Id;
+                      code?: string;
+                      options: any[];
+                  }
+              >;
+              pager?: {
+                  page: number;
+                  pageCount: number;
+                  total: number;
+                  pageSize: number;
+              };
+          };
+    rows: Array<string[]>;
+    width: number;
+    height: number;
+};
