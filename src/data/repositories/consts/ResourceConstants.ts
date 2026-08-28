@@ -38,7 +38,7 @@ export const eventFields = {
     program: true,
     orgUnit: true,
     dataValues: {
-        dataElement: { id: true, code: true },
+        dataElement: true,
         value: true,
     },
     occurredAt: true,

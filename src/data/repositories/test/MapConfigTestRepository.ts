@@ -95,8 +95,8 @@ export class MapConfigTestRepository implements MapConfigRepository {
                 },
                 {
                     id: "BUHp1iUlRz9",
-                    name: "# of active verified - Monkeypox",
-                    disease: "Monkeypox",
+                    name: "# of active verified - Mpox",
+                    disease: "Mpox",
                     incidentStatus: "ALL",
                 },
                 {
@@ -293,20 +293,20 @@ export class MapConfigTestRepository implements MapConfigRepository {
                 },
                 {
                     id: "mw7Qxti6Fk5",
-                    name: "# of active verified - Monkeypox - Watch",
-                    disease: "Monkeypox",
+                    name: "# of active verified - Mpox - Watch",
+                    disease: "Mpox",
                     incidentStatus: "Watch",
                 },
                 {
                     id: "kMsSxdZMqJV",
-                    name: "# of active verified - Monkeypox - Alert",
-                    disease: "Monkeypox",
+                    name: "# of active verified - Mpox - Alert",
+                    disease: "Mpox",
                     incidentStatus: "Alert",
                 },
                 {
                     id: "qL6WGfcoh1l",
-                    name: "# of active verified - Monkeypox - Respond",
-                    disease: "Monkeypox",
+                    name: "# of active verified - Mpox - Respond",
+                    disease: "Mpox",
                     incidentStatus: "Respond",
                 },
                 {

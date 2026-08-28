@@ -1,4 +1,5 @@
-import { D2TrackerEvent, DataValue } from "@eyeseetea/d2-api/api/trackerEvents";
+import { D2TrackerEventToPost } from "@eyeseetea/d2-api/api/trackerEvents";
+import { DataValueToPost, EventDataValue } from "./helpers";
 import {
     IncidentActionPlanDataValues,
     incidentActionPlanIds,
@@ -34,7 +35,7 @@ import _c from "../../../domain/entities/generic/Collection";
 
 export function mapDataElementsToIncidentActionPlan(
     id: Id,
-    dataValues: DataValue[],
+    dataValues: EventDataValue[],
     updatedAt: Maybe<string>
 ): IncidentActionPlanDataValues {
     const iapType = getValueById(dataValues, incidentActionPlanIds.iapType);
@@ -69,7 +70,7 @@ export function mapDataElementsToIncidentActionPlan(
 }
 
 export function mapDataElementsToIncidentResponseActions(
-    instances: D2TrackerEvent[]
+    instances: Array<{ event: Id; dataValues: EventDataValue[] }>
 ): IncidentResponseActionDataValues[] {
     const incidentResponseActions: IncidentResponseActionDataValues[] = instances.map(instance => {
         const { event, dataValues } = instance;
@@ -146,11 +147,11 @@ function mapIncidentActionPlanToDataElements(
     enrollmentId: Id,
     incidentActionPlan: ActionPlanAttrs,
     programStageDataElementsMetadata: D2ProgramStageDataElementsMetadata[]
-): D2TrackerEvent {
+): D2TrackerEventToPost {
     const dataElementValues: Record<ActionPlanCodes, string> =
         getValueFromIncidentActionPlan(incidentActionPlan);
 
-    const dataValues: DataValue[] = programStageDataElementsMetadata.map(programStage => {
+    const dataValues: DataValueToPost[] = programStageDataElementsMetadata.map(programStage => {
         if (!isStringInIncidentActionPlanCodes(programStage.dataElement.code)) {
             throw new Error(
                 `DataElement code ${programStage.dataElement.code} not found in Incident Action Plan Codes`
@@ -175,7 +176,7 @@ export function mapIncidentResponseActionToDataElements(
     enrollmentId: Id,
     incidentResponseActions: ResponseAction | ResponseAction[],
     programStageDataElementsMetadata: D2ProgramStageDataElementsMetadata[]
-): D2TrackerEvent[] {
+): D2TrackerEventToPost[] {
     return Array.isArray(incidentResponseActions)
         ? incidentResponseActions.map(incidentResponseAction => {
               return buildDataValuesFromResponseAction(
@@ -203,11 +204,11 @@ function buildDataValuesFromResponseAction(
     enrollmentId: Id,
     responseAction: ResponseAction,
     programStageDataElementsMetadata: D2ProgramStageDataElementsMetadata[]
-): D2TrackerEvent {
+): D2TrackerEventToPost {
     const dataElementValues: Record<ResponseActionCodes, string> =
         getValueFromIncidentResponseAction(responseAction);
 
-    const dataValues: DataValue[] = programStageDataElementsMetadata
+    const dataValues: DataValueToPost[] = programStageDataElementsMetadata
         .filter(
             programStageDataElement =>
                 programStageDataElement.dataElement.id !== incidentResponseActionsIds.timeLine
@@ -235,8 +236,8 @@ function buildDataValuesFromResponseAction(
     );
 }
 
-function getPopulatedDataElement(dataElement: Id, value: Maybe<string>): DataValue {
-    const populatedDataElement: DataValue = {
+function getPopulatedDataElement(dataElement: Id, value: Maybe<string>): DataValueToPost {
+    const populatedDataElement: DataValueToPost = {
         dataElement: dataElement,
         value: value ?? "",
         updatedAt: new Date().toISOString(),
@@ -252,10 +253,10 @@ function getIncidentActionTrackerEvent(
     programStageId: Id,
     id: Maybe<Id>,
     enrollmentId: Id,
-    dataValues: DataValue[],
+    dataValues: DataValueToPost[],
     teiId: Id
-): D2TrackerEvent {
-    const d2IncidentAction: D2TrackerEvent = {
+): D2TrackerEventToPost {
+    const d2IncidentAction: D2TrackerEventToPost = {
         event: id ?? "",
         status: "ACTIVE",
         program: RTSL_ZEBRA_PROGRAM_ID,
@@ -270,6 +271,6 @@ function getIncidentActionTrackerEvent(
     return d2IncidentAction;
 }
 
-function getValueById(dataValues: DataValue[], dataElement: string): Maybe<string> {
+function getValueById(dataValues: EventDataValue[], dataElement: string): Maybe<string> {
     return dataValues.find(dataValue => dataValue.dataElement === dataElement)?.value;
 }

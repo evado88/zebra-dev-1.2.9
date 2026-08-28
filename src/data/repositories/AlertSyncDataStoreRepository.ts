@@ -6,11 +6,11 @@ import {
 } from "../../domain/repositories/AlertSyncRepository";
 import { apiToFuture, FutureData } from "../api-futures";
 import { Maybe } from "../../utils/ts-utils";
-import { DataValue } from "@eyeseetea/d2-api/api/trackerEvents";
+import { SelectedPick } from "@eyeseetea/d2-api/api";
 import { AlertsAndCaseForCasesData } from "../../domain/entities/AlertsAndCaseForCasesData";
 import { RTSL_ZEBRA_ALERTS_PROGRAM_ID } from "./consts/DiseaseOutbreakConstants";
 import { assertOrError } from "./utils/AssertOrError";
-import { D2TrackerTrackedEntity } from "@eyeseetea/d2-api/api/trackerTrackedEntities";
+import { D2TrackerTrackedEntitySchema } from "@eyeseetea/d2-api/api/trackerTrackedEntities";
 import { Alert } from "../../domain/entities/alert/Alert";
 
 export class AlertSyncDataStoreRepository implements AlertSyncRepository {
@@ -48,18 +48,14 @@ export class AlertSyncDataStoreRepository implements AlertSyncRepository {
         });
     }
 
-    private getAlertTrackedEntity(alert: Alert): FutureData<D2TrackerTrackedEntity> {
+    private getAlertTrackedEntity(alert: Alert): FutureData<AlertSyncTrackedEntity> {
         return apiToFuture(
             this.api.tracker.trackedEntities.get({
                 program: RTSL_ZEBRA_ALERTS_PROGRAM_ID,
                 orgUnit: alert.districtId,
                 trackedEntity: alert.id,
                 ouMode: "SELECTED",
-                fields: {
-                    trackedEntity: true,
-                    attributes: true,
-                    enrollments: true,
-                },
+                fields: alertSyncTrackedEntityFields,
             })
         ).flatMap(response => assertOrError(response.instances[0], "Tracked entity"));
     }
@@ -77,7 +73,7 @@ export class AlertSyncDataStoreRepository implements AlertSyncRepository {
 
     private buildSynchronizationData(
         options: AlertSyncOptions,
-        trackedEntity: D2TrackerTrackedEntity,
+        trackedEntity: AlertSyncTrackedEntity,
         outbreakKey: string
     ): AlertsAndCaseForCasesData {
         const { alert, nationalDiseaseOutbreakEventId } = options;
@@ -113,12 +109,30 @@ export class AlertSyncDataStoreRepository implements AlertSyncRepository {
 
 function getDataValueFromMap(
     key: keyof typeof dataElementIds,
-    dataValues: Maybe<DataValue[]>
+    dataValues: Maybe<Array<{ dataElement: string; value: string }>>
 ): string {
     if (!dataValues) return "";
 
     return dataValues.find(dataValue => dataValue.dataElement === dataElementIds[key])?.value ?? "";
 }
+
+const alertSyncTrackedEntityFields = {
+    trackedEntity: true,
+    attributes: true,
+    enrollments: {
+        events: {
+            event: true,
+            createdAt: true,
+            dataValues: { dataElement: true, value: true },
+        },
+    },
+} as const;
+
+/** Alert tracked entity as returned by the tracker API: only the fields above are present. */
+type AlertSyncTrackedEntity = SelectedPick<
+    D2TrackerTrackedEntitySchema,
+    typeof alertSyncTrackedEntityFields
+>;
 
 const dataElementIds = {
     "Suspected Cases": "d4B5pN7ZTEu",

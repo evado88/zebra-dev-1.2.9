@@ -1,4 +1,4 @@
-import { D2TrackerEvent } from "@eyeseetea/d2-api/api/trackerEvents";
+import { D2TrackerEventToPost } from "@eyeseetea/d2-api/api/trackerEvents";
 import { Future } from "../../domain/entities/generic/Future";
 import { Code, Id } from "../../domain/entities/Ref";
 import { RiskAssessmentGrading } from "../../domain/entities/risk-assessment/RiskAssessmentGrading";
@@ -153,7 +153,7 @@ export class RiskAssessmentD2Repository implements RiskAssessmentRepository {
                 programStage: RTSL_ZEBRA_RISK_ASSESSMENT_GRADING_PROGRAM_STAGE_ID,
                 fields: {
                     dataValues: {
-                        dataElement: { id: true, code: true },
+                        dataElement: true,
                         value: true,
                     },
                     createdAt: true,
@@ -180,7 +180,7 @@ export class RiskAssessmentD2Repository implements RiskAssessmentRepository {
                 fields: {
                     event: true,
                     dataValues: {
-                        dataElement: { id: true, code: true },
+                        dataElement: true,
                         value: true,
                     },
                     trackedEntity: true,
@@ -210,7 +210,7 @@ export class RiskAssessmentD2Repository implements RiskAssessmentRepository {
                     fields: {
                         event: true,
                         dataValues: {
-                            dataElement: { id: true, code: true },
+                            dataElement: true,
                             value: true,
                         },
                         trackedEntity: true,
@@ -226,7 +226,7 @@ export class RiskAssessmentD2Repository implements RiskAssessmentRepository {
                     fields: {
                         event: true,
                         dataValues: {
-                            dataElement: { id: true, code: true },
+                            dataElement: true,
                             value: true,
                         },
                         trackedEntity: true,
@@ -351,13 +351,14 @@ export class RiskAssessmentD2Repository implements RiskAssessmentRepository {
                 enrolledBefore: new Date().toISOString(),
                 program: RTSL_ZEBRA_PROGRAM_ID,
                 orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
+                ouMode: "SELECTED",
             })
         ).flatMap(enrollmentResponse => {
             const enrollmentId = enrollmentResponse.instances[0]?.enrollment;
             if (!enrollmentId) {
                 return Future.error(new Error(`Enrollment not found for Disease Outbreak`));
             }
-            const events: D2TrackerEvent[] = mapRiskAssessmentToDataElements(
+            const events: D2TrackerEventToPost[] = mapRiskAssessmentToDataElements(
                 formData,
                 programStageId,
                 diseaseOutbreakId,
@@ -382,10 +383,11 @@ export class RiskAssessmentD2Repository implements RiskAssessmentRepository {
     }
 
     private deleteCustomQuestion(events: Id[]): FutureData<void> {
-        const d2Events: D2TrackerEvent[] = events.map(event => ({
+        const d2Events: D2TrackerEventToPost[] = events.map(event => ({
             event: event,
             status: "COMPLETED",
             program: RTSL_ZEBRA_PROGRAM_ID,
+            programStage: RTSL_ZEBRA_RISK_ASSESSMENT_QUESTIONNAIRE_CUSTOM_PROGRAM_STAGE_ID,
             orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
             occurredAt: "",
             dataValues: [],

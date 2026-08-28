@@ -1,7 +1,10 @@
-import { D2TrackerEvent, DataValue } from "@eyeseetea/d2-api/api/trackerEvents";
+import {
+    D2TrackerEventSchema,
+    D2TrackerEventToPost,
+} from "@eyeseetea/d2-api/api/trackerEvents";
 
 import { IncidentManagementTeam } from "../../../domain/entities/incident-management-team/IncidentManagementTeam";
-import { getPopulatedDataElement, getValueById } from "./helpers";
+import { DataValueToPost, EventDataValue, getPopulatedDataElement, getValueById } from "./helpers";
 import {
     RTSL_ZEBRA_INCIDENT_MANAGEMENT_TEAM_BUILDER_PROGRAM_STAGE_ID,
     RTSL_ZEBRA_ORG_UNIT_ID,
@@ -17,8 +20,24 @@ import { RTSL_ZEBRA_INCIDENT_MANAGEMENT_TEAM_BUILDER_IDS_WITHOUT_ROLES } from ".
 import { Role } from "../../../domain/entities/incident-management-team/Role";
 import { getISODateAsLocaleDateString } from "./DateTimeHelper";
 
+export const incidentManagementTeamEventFields = {
+    dataValues: {
+        dataElement: true,
+        value: true,
+    },
+    trackedEntity: true,
+    event: true,
+    updatedAt: true,
+} as const;
+
+/** Team builder event as returned by the tracker API: only the fields above are present. */
+export type IncidentManagementTeamEvent = SelectedPick<
+    D2TrackerEventSchema,
+    typeof incidentManagementTeamEventFields
+>;
+
 export function mapD2EventsToIncidentManagementTeam(
-    d2Events: D2TrackerEvent[],
+    d2Events: IncidentManagementTeamEvent[],
     roles: Role[],
     teamMembers: TeamMember[]
 ): Maybe<IncidentManagementTeam> {
@@ -65,10 +84,10 @@ export function mapD2EventsToIncidentManagementTeam(
 
 export function getTeamMemberIncidentManagementTeamRoles(
     teamMemberAssigned: TeamMember,
-    events: D2TrackerEvent[],
+    events: IncidentManagementTeamEvent[],
     roles: Role[]
 ): TeamRole[] {
-    return events.reduce((acc: TeamRole[], event: D2TrackerEvent) => {
+    return events.reduce((acc: TeamRole[], event: IncidentManagementTeamEvent) => {
         if (
             teamMemberAssigned.username ===
             getValueById(
@@ -84,7 +103,7 @@ export function getTeamMemberIncidentManagementTeamRoles(
     }, []);
 }
 
-function getTeamRole(eventId: Id, dataValues: DataValue[], roles: Role[]): Maybe<TeamRole> {
+function getTeamRole(eventId: Id, dataValues: EventDataValue[], roles: Role[]): Maybe<TeamRole> {
     const selectedRoleId = roles.find(({ id }) => {
         const role = getValueById(dataValues, id);
         return role === "true";
@@ -125,19 +144,19 @@ export function mapIncidentManagementTeamMemberToD2Event(
     enrollmentId: Id,
     programStageDataElementsMetadata: D2ProgramStageDataElementsMetadata[],
     roles: Role[]
-): D2TrackerEvent {
+): D2TrackerEventToPost {
     const dataElementValues = getValueFromIncidentManagementTeamMember(
         incidentManagementTeamMember.username,
         teamMemberRole,
         roles
     );
 
-    const dataValues: DataValue[] = programStageDataElementsMetadata.map(programStage => {
+    const dataValues: DataValueToPost[] = programStageDataElementsMetadata.map(programStage => {
         const typedCode = programStage.dataElement.code;
         return getPopulatedDataElement(programStage.dataElement.id, dataElementValues[typedCode]);
     });
 
-    const d2IncidentManagementTeam: D2TrackerEvent = {
+    const d2IncidentManagementTeam: D2TrackerEventToPost = {
         event: teamMemberRole.id ?? "",
         status: "ACTIVE",
         program: RTSL_ZEBRA_PROGRAM_ID,

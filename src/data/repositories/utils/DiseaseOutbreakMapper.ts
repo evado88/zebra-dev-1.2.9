@@ -3,7 +3,10 @@ import {
     DataSource,
     DiseaseOutbreakEventBaseAttrs,
 } from "../../../domain/entities/disease-outbreak-event/DiseaseOutbreakEvent";
-import { D2TrackerTrackedEntity, Attribute } from "@eyeseetea/d2-api/api/trackerTrackedEntities";
+import {
+    AttributeToPost,
+    D2TrackedEntityInstanceToPost,
+} from "@eyeseetea/d2-api/api/trackerTrackedEntities";
 import {
     DiseaseOutbreakCode,
     diseaseOutbreakCodes,
@@ -18,8 +21,23 @@ import {
 } from "../consts/DiseaseOutbreakConstants";
 import { SelectedPick } from "@eyeseetea/d2-api/api";
 import { D2TrackedEntityAttributeSchema } from "../../../types/d2-api";
-import { D2TrackerEnrollment } from "@eyeseetea/d2-api/api/trackerEnrollments";
+import { D2TrackerEnrollmentToPost } from "@eyeseetea/d2-api/api/trackerEnrollments";
 import { getCurrentTimeString, getISODateAsLocaleDateString } from "./DateTimeHelper";
+import { Id } from "../../../domain/entities/Ref";
+import { Maybe } from "../../../utils/ts-utils";
+
+/**
+ * The subset of a tracked entity this mapper reads. Tracker queries return only the fields
+ * they select, and the disease outbreak queries do not all select the same ones, so this
+ * describes what the mapper needs rather than a full `D2TrackerTrackedEntity`.
+ */
+export type DiseaseOutbreakTrackedEntity = {
+    trackedEntity?: Id;
+    createdAt?: string;
+    updatedAt?: string;
+    attributes?: Array<{ code?: string; value: string }>;
+    enrollments?: Array<{ status?: Maybe<"ACTIVE" | "COMPLETED" | "CANCELLED"> }>;
+};
 
 type D2TrackedEntityAttribute = {
     trackedEntityAttribute: SelectedPick<
@@ -33,7 +51,7 @@ type D2TrackedEntityAttribute = {
 };
 
 export function mapTrackedEntityAttributesToDiseaseOutbreak(
-    trackedEntity: D2TrackerTrackedEntity
+    trackedEntity: DiseaseOutbreakTrackedEntity
 ): DiseaseOutbreakEventBaseAttrs | undefined {
     if (!trackedEntity.trackedEntity) throw new Error("Tracked entity not found");
 
@@ -108,11 +126,11 @@ export function mapTrackedEntityAttributesToDiseaseOutbreak(
 export function mapDiseaseOutbreakEventToTrackedEntityAttributes(
     diseaseOutbreak: DiseaseOutbreakEventBaseAttrs,
     attributesMetadata: D2TrackedEntityAttribute[]
-): D2TrackerTrackedEntity {
+): D2TrackedEntityInstanceToPost {
     const attributeValues: Record<DiseaseOutbreakCode, string> =
         getValueFromDiseaseOutbreak(diseaseOutbreak);
 
-    const attributes: Attribute[] = attributesMetadata.map(attribute => {
+    const attributes: AttributeToPost[] = attributesMetadata.map(attribute => {
         if (!isStringInDiseaseOutbreakCodes(attribute.trackedEntityAttribute.code)) {
             throw new Error("Attribute code not found in DiseaseOutbreakCodes");
         }
@@ -127,22 +145,23 @@ export function mapDiseaseOutbreakEventToTrackedEntityAttributes(
     const isExistingTEI = diseaseOutbreak.id !== "";
 
     if (isExistingTEI) {
-        const trackedEntity: D2TrackerTrackedEntity = {
+        const trackedEntity: D2TrackedEntityInstanceToPost = {
             orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
             trackedEntityType: RTSL_ZEBRA_TRACKED_ENTITY_TYPE_ID,
             trackedEntity: diseaseOutbreak.id,
             attributes: attributes,
+            enrollments: [],
         };
 
         return trackedEntity;
     } else {
-        const enrollment: D2TrackerEnrollment = {
+        const enrollment: D2TrackerEnrollmentToPost = {
             orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
             program: RTSL_ZEBRA_PROGRAM_ID,
             enrollment: "",
+            trackedEntity: diseaseOutbreak.id,
             trackedEntityType: RTSL_ZEBRA_TRACKED_ENTITY_TYPE_ID,
             notes: [],
-            relationships: [],
             attributes: attributes,
             events: [],
             enrolledAt: getCurrentTimeString(),
@@ -157,7 +176,7 @@ export function mapDiseaseOutbreakEventToTrackedEntityAttributes(
             deleted: false,
             storedBy: "",
         };
-        const trackedEntity: D2TrackerTrackedEntity = {
+        const trackedEntity: D2TrackedEntityInstanceToPost = {
             trackedEntity: diseaseOutbreak.id,
             orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
             trackedEntityType: RTSL_ZEBRA_TRACKED_ENTITY_TYPE_ID,
@@ -173,7 +192,7 @@ export function mapDiseaseOutbreakEventToTrackedEntityAttributes(
 
 export function getValueFromMap(
     key: keyof typeof diseaseOutbreakCodes,
-    trackedEntity: D2TrackerTrackedEntity
+    trackedEntity: DiseaseOutbreakTrackedEntity
 ): string {
     return trackedEntity.attributes?.find(a => a.code === diseaseOutbreakCodes[key])?.value ?? "";
 }

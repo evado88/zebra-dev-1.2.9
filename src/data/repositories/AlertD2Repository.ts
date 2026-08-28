@@ -16,7 +16,12 @@ import {
 import { Code, Id } from "../../domain/entities/Ref";
 import _ from "../../domain/entities/generic/Collection";
 import { Future } from "../../domain/entities/generic/Future";
-import { Attribute, D2TrackerTrackedEntity } from "@eyeseetea/d2-api/api/trackerTrackedEntities";
+import {
+    AttributeToPost,
+    D2TrackedEntityInstanceToPost,
+    D2TrackerTrackedEntitySchema,
+} from "@eyeseetea/d2-api/api/trackerTrackedEntities";
+import { SelectedPick } from "@eyeseetea/d2-api/api";
 import { Maybe } from "../../utils/ts-utils";
 import {
     Alert,
@@ -28,11 +33,15 @@ import {
     getAllTrackedEntitiesAsync,
     ProgramStatus,
     programStatusOptions,
+    TrackedEntityWithEnrollments,
 } from "./utils/getAllTrackedEntities";
 import { getAlertValueFromMap } from "./utils/AlertOutbreakMapper";
 import { IncidentStatus } from "../../domain/entities/disease-outbreak-event/PerformanceOverviewMetrics";
 import { assertOrError } from "./utils/AssertOrError";
-import { D2TrackerEnrollment } from "@eyeseetea/d2-api/api/trackerEnrollments";
+import {
+    D2TrackerEnrollmentSchema,
+    D2TrackerEnrollmentToPost,
+} from "@eyeseetea/d2-api/api/trackerEnrollments";
 import logger from "../../scripts/utils/console-logger";
 import { parseTrackerPostErrorResponse } from "./utils/parseTrackerPostErrorResponse";
 
@@ -124,14 +133,12 @@ export class AlertD2Repository implements AlertRepository {
     updateAlertPHEOCStatusAndMappedEventId(options: UpdatePHEOCStatusOptions): FutureData<void> {
         const { alertId, pheocStatus, diseaseOutbreakId } = options;
 
-        return this._getAlertTrackedEntityById(alertId, {
-            trackedEntityType: true,
-            orgUnit: true,
-        }).flatMap(alertTrackedEntity => {
-            const alertsToPost: D2TrackerTrackedEntity = {
+        return this._getAlertTrackedEntityById(alertId).flatMap(alertTrackedEntity => {
+            const alertsToPost: D2TrackedEntityInstanceToPost = {
                 trackedEntity: alertId,
                 trackedEntityType: alertTrackedEntity.trackedEntityType,
                 orgUnit: alertTrackedEntity.orgUnit,
+                enrollments: [],
                 attributes: [
                     {
                         attribute: RTSL_ZEBRA_ALERTS_PHEOC_STATUS_ID,
@@ -161,12 +168,13 @@ export class AlertD2Repository implements AlertRepository {
 
     complete(id: Id): FutureData<void> {
         return this.getTrackedEntityEnrollment(id).flatMap(currentEnrollment => {
-            const enrollment: D2TrackerEnrollment = {
+            const enrollment: D2TrackerEnrollmentToPost = {
                 ...currentEnrollment,
                 orgUnit: currentEnrollment.orgUnit,
                 program: RTSL_ZEBRA_ALERTS_PROGRAM_ID,
                 trackedEntity: id,
                 status: "COMPLETED",
+                events: [],
             };
 
             return apiToFuture(
@@ -180,20 +188,16 @@ export class AlertD2Repository implements AlertRepository {
         });
     }
 
-    private getTrackedEntityEnrollment(id: Id): FutureData<D2TrackerEnrollment> {
-        return this._getAlertTrackedEntityById(id, { orgUnit: true }).flatMap(trackedEntity =>
+    private getTrackedEntityEnrollment(id: Id): FutureData<AlertEnrollment> {
+        return this._getAlertTrackedEntityById(id).flatMap(trackedEntity =>
             apiToFuture(
                 this.api.tracker.enrollments.get({
-                    fields: {
-                        enrollment: true,
-                        enrolledAt: true,
-                        occurredAt: true,
-                        orgUnit: true,
-                    },
+                    fields: alertEnrollmentFields,
                     trackedEntity: id,
                     enrolledBefore: new Date().toISOString(),
                     program: RTSL_ZEBRA_ALERTS_PROGRAM_ID,
                     orgUnit: trackedEntity.orgUnit,
+                    ouMode: "SELECTED",
                 })
             ).flatMap(enrollmentResponse =>
                 assertOrError(
@@ -209,6 +213,7 @@ export class AlertD2Repository implements AlertRepository {
             this.api.tracker.trackedEntities.get({
                 trackedEntity: alertId,
                 program: RTSL_ZEBRA_ALERTS_PROGRAM_ID,
+                ouMode: "ACCESSIBLE",
                 enrollmentEnrolledBefore: new Date().toISOString(),
                 fields: { attributes: true },
             })
@@ -227,7 +232,7 @@ export class AlertD2Repository implements AlertRepository {
         });
     }
 
-    private mapAlertTrackedEntityToAlert(alertTrackedEntity: D2TrackerTrackedEntity): Alert {
+    private mapAlertTrackedEntityToAlert(alertTrackedEntity: AlertTrackedEntity): Alert {
         const enrollment =
             alertTrackedEntity.enrollments && alertTrackedEntity.enrollments[0]
                 ? alertTrackedEntity.enrollments[0]
@@ -305,16 +310,14 @@ export class AlertD2Repository implements AlertRepository {
         });
     }
 
-    private _getAlertTrackedEntityById(
-        id: Id,
-        fields?: AlertTrackerEntityFields
-    ): FutureData<D2TrackerTrackedEntity> {
+    private _getAlertTrackedEntityById(id: Id): FutureData<AlertTrackedEntity> {
         return apiToFuture(
             this.api.tracker.trackedEntities.get({
                 trackedEntity: id,
                 program: RTSL_ZEBRA_ALERTS_PROGRAM_ID,
+                ouMode: "ACCESSIBLE",
                 enrollmentEnrolledBefore: new Date().toISOString(),
-                fields: fields || alertTrackerEntityFields,
+                fields: alertTrackerEntityFields,
             })
         ).flatMap(response =>
             assertOrError(response.instances[0], `Alert tracked entity with id ${id}`)
@@ -337,17 +340,20 @@ export class AlertD2Repository implements AlertRepository {
                 programStatus: programStatusOptions.ACTIVE,
             })
         ).flatMap(trackedEntities => {
-            const trackedEntitiesToPost = trackedEntities.map(trackedEntity => ({
-                trackedEntity: trackedEntity.trackedEntity,
-                trackedEntityType: trackedEntity.trackedEntityType,
-                orgUnit: trackedEntity.orgUnit,
-                attributes: [
-                    {
-                        attribute: RTSL_ZEBRA_ALERTS_PHEOC_STATUS_ID,
-                        value: PHEOCStatus[pheocStatus],
-                    },
-                ],
-            }));
+            const trackedEntitiesToPost: D2TrackedEntityInstanceToPost[] = trackedEntities.map(
+                trackedEntity => ({
+                    trackedEntity: trackedEntity.trackedEntity,
+                    trackedEntityType: trackedEntity.trackedEntityType,
+                    orgUnit: trackedEntity.orgUnit,
+                    enrollments: [],
+                    attributes: [
+                        {
+                            attribute: RTSL_ZEBRA_ALERTS_PHEOC_STATUS_ID,
+                            value: PHEOCStatus[pheocStatus],
+                        },
+                    ],
+                })
+            );
 
             if (trackedEntitiesToPost.length === 0) return Future.success(undefined);
 
@@ -372,10 +378,11 @@ export class AlertD2Repository implements AlertRepository {
         maybeDiseaseOutbreakId: Maybe<Id>
     ): FutureData<void> {
         return this._getAlertTrackedEntityById(alertId).flatMap(alertTrackedEntity => {
-            const alertsToPost: D2TrackerTrackedEntity = {
+            const alertsToPost: D2TrackedEntityInstanceToPost = {
                 trackedEntity: alertId,
                 trackedEntityType: alertTrackedEntity.trackedEntityType,
                 orgUnit: alertTrackedEntity.orgUnit,
+                enrollments: [],
                 attributes: [
                     {
                         attribute: RTSL_ZEBRA_ALERTS_CONFIRMED_DISEASE_TEA_ID,
@@ -453,12 +460,12 @@ export class AlertD2Repository implements AlertRepository {
     }
 
     private mapSuspectedDiseaseWithConfirmedAndEmptyToUnknown(
-        alertTrackedEntities: D2TrackerTrackedEntity[]
-    ): D2TrackerTrackedEntity[] {
+        alertTrackedEntities: TrackedEntityWithEnrollments[]
+    ): D2TrackedEntityInstanceToPost[] {
         return alertTrackedEntities.reduce(
             (
-                updatedAlerts: D2TrackerTrackedEntity[],
-                alertTrackedEntity: D2TrackerTrackedEntity
+                updatedAlerts: D2TrackedEntityInstanceToPost[],
+                alertTrackedEntity: TrackedEntityWithEnrollments
             ) => {
                 const confirmedDiseaseCode = getAlertValueFromMap(
                     "confirmedDisease",
@@ -473,6 +480,7 @@ export class AlertD2Repository implements AlertRepository {
                     trackedEntity: alertTrackedEntity.trackedEntity,
                     trackedEntityType: alertTrackedEntity.trackedEntityType,
                     orgUnit: alertTrackedEntity.orgUnit,
+                    enrollments: [],
                 };
 
                 if (
@@ -548,11 +556,11 @@ export class AlertD2Repository implements AlertRepository {
     }
 
     private getActiveVerifiedRespondAlertsWithoutDiseaseOutbreakId(
-        alertTrackedEntitiesByConfirmedDisease: D2TrackerTrackedEntity[],
+        alertTrackedEntitiesByConfirmedDisease: TrackedEntityWithEnrollments[],
         diseaseOutbreakEventId: Id
-    ): D2TrackerTrackedEntity[] {
+    ): D2TrackedEntityInstanceToPost[] {
         return _(alertTrackedEntitiesByConfirmedDisease)
-            .compactMap<D2TrackerTrackedEntity>(trackedEntity => {
+            .compactMap<D2TrackedEntityInstanceToPost>(trackedEntity => {
                 const isActive = trackedEntity.inactive === false;
 
                 const verificationStatus = getAlertValueFromMap(
@@ -569,7 +577,7 @@ export class AlertD2Repository implements AlertRepository {
                 if (nationalEventId || !isActive || !isVerified || !isRespondPheocStatus)
                     return undefined;
 
-                const restAttributes: Attribute[] =
+                const restAttributes: AttributeToPost[] =
                     trackedEntity.attributes?.filter(
                         attribute =>
                             attribute.attribute !==
@@ -580,6 +588,7 @@ export class AlertD2Repository implements AlertRepository {
                     trackedEntity: trackedEntity.trackedEntity,
                     trackedEntityType: trackedEntity.trackedEntityType,
                     orgUnit: trackedEntity.orgUnit,
+                    enrollments: [],
                     attributes: [
                         ...restAttributes,
                         {
@@ -598,7 +607,7 @@ export class AlertD2Repository implements AlertRepository {
         ouMode: "SELECTED" | "DESCENDANTS";
         confirmedDisease: Code;
         programStatus?: ProgramStatus;
-    }): FutureData<D2TrackerTrackedEntity[]> {
+    }): FutureData<TrackedEntityWithEnrollments[]> {
         const { program, orgUnit, ouMode, confirmedDisease, programStatus } = options;
 
         return Future.fromPromise(
@@ -618,9 +627,22 @@ export class AlertD2Repository implements AlertRepository {
 const alertTrackerEntityFields = {
     orgUnit: true,
     attributes: true,
-    enrollments: true,
+    enrollments: { status: true },
     trackedEntityType: true,
     trackedEntity: true,
 } as const;
 
-type AlertTrackerEntityFields = Partial<typeof alertTrackerEntityFields>;
+/** Alert tracked entity as returned by the tracker API: only the fields above are present. */
+type AlertTrackedEntity = SelectedPick<
+    D2TrackerTrackedEntitySchema,
+    typeof alertTrackerEntityFields
+>;
+
+const alertEnrollmentFields = {
+    enrollment: true,
+    enrolledAt: true,
+    occurredAt: true,
+    orgUnit: true,
+} as const;
+
+type AlertEnrollment = SelectedPick<D2TrackerEnrollmentSchema, typeof alertEnrollmentFields>;

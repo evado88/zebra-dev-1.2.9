@@ -1,4 +1,4 @@
-import { D2TrackerEvent, DataValue } from "@eyeseetea/d2-api/api/trackerEvents";
+import { D2TrackerEventSchema, D2TrackerEventToPost } from "@eyeseetea/d2-api/api/trackerEvents";
 import { Id } from "../../../domain/entities/Ref";
 import { Maybe } from "../../../utils/ts-utils";
 import { Resource } from "../../../domain/entities/resources/Resource";
@@ -6,6 +6,7 @@ import { SelectedPick } from "@eyeseetea/d2-api/api";
 import { D2DataElementSchema } from "@eyeseetea/d2-api/2.36";
 import {
     dhis2ResourceTypeToResourceType,
+    eventFields,
     isDHIS2ResourceType,
     isStringInResourcesCodes,
     ResourcesCodes,
@@ -13,11 +14,17 @@ import {
     ResourcesKeyCode,
     resourceTypeToDHIS2ResourceType,
     RTSL_ZEBRA_RESOURCES_EVENT_PROGRAM_ID,
+    RTSL_ZEBRA_RESOURCES_EVENT_PROGRAM_STAGE_ID,
     RTSL_ZEBRA_RESOURCES_ORG_UNIT_ID,
 } from "../consts/ResourceConstants";
 import { ResourceType } from "../../../domain/entities/resources/ResourceTypeNamed";
 
-export function mapD2TrackerEventToResource(d2TrackerEvent: D2TrackerEvent): Resource {
+/** Resource event as returned by the tracker API: only {@link eventFields} are present. */
+export type D2ResourceEvent = SelectedPick<D2TrackerEventSchema, typeof eventFields>;
+
+type DataValueToPost = { dataElement: Id; value: string };
+
+export function mapD2TrackerEventToResource(d2TrackerEvent: D2ResourceEvent): Resource {
     const { event, dataValues } = d2TrackerEvent;
 
     const dhis2ResourceType = getValueById(dataValues, resourcesIds.type);
@@ -76,10 +83,10 @@ export function mapD2TrackerEventToResource(d2TrackerEvent: D2TrackerEvent): Res
 export function mapResourceToD2TrackerEvent(
     resource: Resource,
     programStageDataElementsMetadata: D2ProgramStageDataElementsMetadata[]
-): D2TrackerEvent {
+): D2TrackerEventToPost {
     const dataElementValues: Record<ResourcesCodes, string> = getDataValuesFromResource(resource);
 
-    const dataValues: DataValue[] = programStageDataElementsMetadata.map(programStage => {
+    const dataValues: DataValueToPost[] = programStageDataElementsMetadata.map(programStage => {
         if (!isStringInResourcesCodes(programStage.dataElement.code)) {
             throw new Error(
                 `DataElement code ${programStage.dataElement.code} not found in Resources Codes`
@@ -92,6 +99,7 @@ export function mapResourceToD2TrackerEvent(
     return {
         event: resource.id,
         program: RTSL_ZEBRA_RESOURCES_EVENT_PROGRAM_ID,
+        programStage: RTSL_ZEBRA_RESOURCES_EVENT_PROGRAM_STAGE_ID,
         orgUnit: RTSL_ZEBRA_RESOURCES_ORG_UNIT_ID,
         dataValues: dataValues,
         occurredAt: new Date().toISOString(),
@@ -141,17 +149,16 @@ function getDataValuesFromResource(resource: Resource): Record<ResourcesCodes, s
     }
 }
 
-function getPopulatedDataValue(dataElement: Id, value: Maybe<string>): DataValue {
-    const populatedDataValue: DataValue = {
+function getPopulatedDataValue(dataElement: Id, value: Maybe<string>): DataValueToPost {
+    const populatedDataValue: DataValueToPost = {
         dataElement: dataElement,
         value: value ?? "",
-        createdAt: new Date().toISOString(),
     };
 
     return populatedDataValue;
 }
 
-function getValueById(dataValues: DataValue[], dataElement: string): Maybe<string> {
+function getValueById(dataValues: DataValueToPost[], dataElement: string): Maybe<string> {
     return dataValues.find(dataValue => dataValue.dataElement === dataElement)?.value;
 }
 

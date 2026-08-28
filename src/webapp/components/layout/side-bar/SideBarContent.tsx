@@ -44,11 +44,11 @@ const DEFAULT_SIDEBAR_OPTIONS: SideBarOption[] = [
 
 const DASHBOARD_SIDEBAR_OPTIONS: SideBarOption[] = [
     {
-        text: "Zebra Events Dashboardxxp",
+        text: "Zebra Events Dashboard",
         value: RouteName.ZEBRA_DASHBOARD,
     },
     {
-        text: "eIDSR Events Dashboardxxp",
+        text: "eIDSR Events Dashboard",
         value: RouteName.ALERTS_DASHBOARD,
     },
 ];

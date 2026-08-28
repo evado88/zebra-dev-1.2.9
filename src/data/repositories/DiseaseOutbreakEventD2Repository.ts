@@ -16,7 +16,8 @@ import {
     RTSL_ZEBRA_ORG_UNIT_ID,
     RTSL_ZEBRA_PROGRAM_ID,
 } from "./consts/DiseaseOutbreakConstants";
-import { D2TrackerTrackedEntity } from "@eyeseetea/d2-api/api/trackerTrackedEntities";
+import { SelectedPick } from "@eyeseetea/d2-api/api";
+import { D2TrackedEntityInstanceToPost } from "@eyeseetea/d2-api/api/trackerTrackedEntities";
 import {
     D2ProgramStageDataElement,
     getProgramDataElementsMetadata,
@@ -25,8 +26,8 @@ import {
 import { assertOrError } from "./utils/AssertOrError";
 import { Future } from "../../domain/entities/generic/Future";
 import { getAllTrackedEntitiesAsync, programStatusOptions } from "./utils/getAllTrackedEntities";
-import { D2TrackerEnrollment } from "@eyeseetea/d2-api/api/trackerEnrollments";
-import { D2TrackerEvent } from "@eyeseetea/d2-api/api/trackerEvents";
+import { D2TrackerEnrollmentToPost } from "@eyeseetea/d2-api/api/trackerEnrollments";
+import { D2TrackerEventSchema, D2TrackerEventToPost } from "@eyeseetea/d2-api/api/trackerEvents";
 import {
     CasesDataCode,
     CasesDataKeyCode,
@@ -47,12 +48,13 @@ export class DiseaseOutbreakEventD2Repository implements DiseaseOutbreakEventRep
             this.api.tracker.trackedEntities.get({
                 program: RTSL_ZEBRA_PROGRAM_ID,
                 orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
+                ouMode: "SELECTED",
                 trackedEntity: id,
                 fields: {
                     attributes: true,
                     trackedEntity: true,
                     updatedAt: true,
-                    enrollments: true,
+                    enrollments: { status: true },
                 },
             })
         )
@@ -123,7 +125,7 @@ export class DiseaseOutbreakEventD2Repository implements DiseaseOutbreakEventRep
                         new Error(`Program Tracked Entity Attributes metadata not found`)
                     );
 
-                const trackedEntity: D2TrackerTrackedEntity =
+                const trackedEntity: D2TrackedEntityInstanceToPost =
                     mapDiseaseOutbreakEventToTrackedEntityAttributes(diseaseOutbreak, teasMetadata);
 
                 return apiToFuture(
@@ -183,6 +185,7 @@ export class DiseaseOutbreakEventD2Repository implements DiseaseOutbreakEventRep
                 enrolledBefore: new Date().toISOString(),
                 program: RTSL_ZEBRA_PROGRAM_ID,
                 orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
+                ouMode: "SELECTED",
             })
         ).flatMap(enrollmentResponse => {
             const currentEnrollment = enrollmentResponse.instances[0];
@@ -191,12 +194,13 @@ export class DiseaseOutbreakEventD2Repository implements DiseaseOutbreakEventRep
                 return Future.error(new Error(`Enrollment not found for Event Tracker`));
             }
 
-            const enrollment: D2TrackerEnrollment = {
+            const enrollment: D2TrackerEnrollmentToPost = {
                 ...currentEnrollment,
                 orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
                 program: RTSL_ZEBRA_PROGRAM_ID,
                 trackedEntity: id,
                 status: "COMPLETED",
+                events: [],
             };
 
             return apiToFuture(
@@ -232,8 +236,8 @@ export class DiseaseOutbreakEventD2Repository implements DiseaseOutbreakEventRep
             }
 
             const d2CompletedEvents = d2Events.map(
-                (d2Event: D2TrackerEvent): D2TrackerEvent => ({
-                    ...d2Event,
+                (d2Event: D2CaseDataEvent): D2TrackerEventToPost => ({
+                    ...mapCaseDataEventToPost(d2Event),
                     status: "COMPLETED",
                 })
             );
@@ -253,22 +257,12 @@ export class DiseaseOutbreakEventD2Repository implements DiseaseOutbreakEventRep
 
     private getd2EventCasesDataByDiseaseOutbreakId(
         diseaseOutbreakId: Id
-    ): FutureData<D2TrackerEvent[]> {
+    ): FutureData<D2CaseDataEvent[]> {
         return apiToFuture(
             this.api.tracker.events.get({
                 program: RTSL_ZEBRA_CASE_PROGRAM_ID,
                 programStage: RTSL_ZEBRA_CASE_PROGRAM_STAGE_ID,
-                fields: {
-                    program: true,
-                    orgUnit: true,
-                    dataValues: {
-                        dataElement: { id: true, code: true },
-                        value: true,
-                    },
-                    event: true,
-                    occurredAt: true,
-                    status: true,
-                },
+                fields: casesDataEventFields,
                 filter: `${RTSL_ZEB_DET_NATIONAL_EVENT_ID_ID}:eq:${diseaseOutbreakId}`,
             })
         )
@@ -322,7 +316,10 @@ export class DiseaseOutbreakEventD2Repository implements DiseaseOutbreakEventRep
     private deleteCasesData(diseaseOutbreak: DiseaseOutbreakEvent): FutureData<void> {
         return this.getd2EventCasesDataByDiseaseOutbreakId(diseaseOutbreak.id).flatMap(d2Events => {
             return apiToFuture(
-                this.api.tracker.post({ importStrategy: "DELETE" }, { events: d2Events })
+                this.api.tracker.post(
+                    { importStrategy: "DELETE" },
+                    { events: d2Events.map(mapCaseDataEventToPost) }
+                )
             ).flatMap(response => {
                 if (response.status !== "OK") {
                     return Future.error(
@@ -337,7 +334,7 @@ export class DiseaseOutbreakEventD2Repository implements DiseaseOutbreakEventRep
         caseData: CaseData,
         diseaseOutbreak: DiseaseOutbreakEvent,
         programDataElements: D2ProgramStageDataElement[]
-    ): D2TrackerEvent {
+    ): D2TrackerEventToPost {
         const casesDataValuesByCode: Record<CasesDataCode, string> =
             getCasesDataValuesFromDiseaseOutbreak(caseData, diseaseOutbreak);
 
@@ -364,4 +361,30 @@ export class DiseaseOutbreakEventD2Repository implements DiseaseOutbreakEventRep
     }
 
     //TO DO : Implement delete/archive after requirement confirmation
+}
+
+const casesDataEventFields = {
+    program: true,
+    orgUnit: true,
+    dataValues: {
+        dataElement: true,
+        value: true,
+    },
+    event: true,
+    occurredAt: true,
+    status: true,
+} as const;
+
+/** Cases data event as returned by the tracker API: only {@link casesDataEventFields} are present. */
+type D2CaseDataEvent = SelectedPick<D2TrackerEventSchema, typeof casesDataEventFields>;
+
+/**
+ * The tracker import endpoint requires `programStage` on every event, which is not part of
+ * the fields read back above: it is always the cases program stage for these events.
+ */
+function mapCaseDataEventToPost(d2Event: D2CaseDataEvent): D2TrackerEventToPost {
+    return {
+        ...d2Event,
+        programStage: RTSL_ZEBRA_CASE_PROGRAM_STAGE_ID,
+    };
 }

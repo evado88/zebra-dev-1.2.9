@@ -1,7 +1,10 @@
 import { D2Api } from "@eyeseetea/d2-api/2.36";
 import { OutbreakAlert, UNKNOWN_DISEASE_CODE } from "../../domain/entities/alert/OutbreakAlert";
 import { OutbreakAlertRepository } from "../../domain/repositories/OutbreakAlertRepository";
-import { Attribute, D2TrackerTrackedEntity } from "@eyeseetea/d2-api/api/trackerTrackedEntities";
+import {
+    AttributeToPost,
+    D2TrackedEntityInstanceToPost,
+} from "@eyeseetea/d2-api/api/trackerTrackedEntities";
 import {
     RTSL_ZEBRA_ALERTS_SUSPECTED_DISEASE_TEA_ID,
     RTSL_ZEBRA_ALERTS_NATIONAL_DISEASE_OUTBREAK_EVENT_ID_TEA_ID,
@@ -16,7 +19,7 @@ import { Code, Id } from "../../domain/entities/Ref";
 import { apiToFuture, FutureData } from "../api-futures";
 import { Future } from "../../domain/entities/generic/Future";
 import _ from "../../domain/entities/generic/Collection";
-import { getTEAttributeById } from "./utils/MetadataHelper";
+import { getTEAttributeById, TrackedEntityAttributeValue } from "./utils/MetadataHelper";
 import {
     getAlertValueFromMap,
     mapTrackedEntityAttributesToNotificationOptions,
@@ -25,6 +28,7 @@ import {
     getAllTrackedEntitiesAsync,
     ProgramStatus,
     programStatusOptions,
+    TrackedEntityWithEnrollments,
 } from "./utils/getAllTrackedEntities";
 import { Maybe } from "../../utils/ts-utils";
 import { NotificationOptions } from "../../domain/repositories/NotificationRepository";
@@ -82,12 +86,12 @@ export class OutbreakAlertD2Repository implements OutbreakAlertRepository {
                 return Future.success(undefined);
             }
 
-            const alertTEIsWithConfirmedDisease: D2TrackerTrackedEntity[] =
+            const alertTEIsWithConfirmedDisease: D2TrackedEntityInstanceToPost[] =
                 alertsTEIsWithoutConfirmedDisease.reduce(
                     (
-                        acc: D2TrackerTrackedEntity[],
-                        trackedEntity: D2TrackerTrackedEntity
-                    ): D2TrackerTrackedEntity[] => {
+                        acc: D2TrackedEntityInstanceToPost[],
+                        trackedEntity: TrackedEntityWithEnrollments
+                    ): D2TrackedEntityInstanceToPost[] => {
                         const { maybeSuspectedDiseaseAttribute } =
                             this.getAlertTEAttributes(trackedEntity);
 
@@ -95,6 +99,7 @@ export class OutbreakAlertD2Repository implements OutbreakAlertRepository {
                             trackedEntity: trackedEntity.trackedEntity,
                             trackedEntityType: trackedEntity.trackedEntityType,
                             orgUnit: trackedEntity.orgUnit,
+                            enrollments: [],
                         };
                         const suspectedDiseaseCode = maybeSuspectedDiseaseAttribute?.value;
                         const confirmedDiseaseValue =
@@ -102,17 +107,16 @@ export class OutbreakAlertD2Repository implements OutbreakAlertRepository {
                                 option => option.code === suspectedDiseaseCode
                             )?.code || UNKNOWN_DISEASE_CODE;
 
-                        const restAttributes: Attribute[] =
+                        const restAttributes: AttributeToPost[] =
                             trackedEntity.attributes?.filter(
                                 attribute =>
                                     attribute.code !== RTSL_ZEBRA_ALERTS_CONFIRMED_DISEASE_TEA_CODE
                             ) || [];
 
-                        const updatedAttributes: Attribute[] = [
+                        const updatedAttributes: AttributeToPost[] = [
                             ...restAttributes,
                             {
                                 attribute: RTSL_ZEBRA_ALERTS_CONFIRMED_DISEASE_TEA_ID,
-                                code: RTSL_ZEBRA_ALERTS_CONFIRMED_DISEASE_TEA_CODE,
                                 value: confirmedDiseaseValue,
                             },
                         ];
@@ -157,8 +161,8 @@ export class OutbreakAlertD2Repository implements OutbreakAlertRepository {
     }
 
     private getIBSAndEBSAlertsWithoutConfirmedDisease(
-        alertTrackedEntities: D2TrackerTrackedEntity[]
-    ): D2TrackerTrackedEntity[] {
+        alertTrackedEntities: TrackedEntityWithEnrollments[]
+    ): TrackedEntityWithEnrollments[] {
         return alertTrackedEntities.filter(trackedEntity => {
             const { maybeConfirmedDiseaseAttribute, maybeIBSIdAttribute, maybeEBSIdAttribute } =
                 this.getAlertTEAttributes(trackedEntity);
@@ -171,7 +175,7 @@ export class OutbreakAlertD2Repository implements OutbreakAlertRepository {
     }
 
     private buildAlertData(
-        trackedEntity: D2TrackerTrackedEntity,
+        trackedEntity: TrackedEntityWithEnrollments,
         confirmedDiseaseCode: Code,
         notificationOptions: NotificationOptions
     ): OutbreakAlert {
@@ -195,12 +199,12 @@ export class OutbreakAlertD2Repository implements OutbreakAlertRepository {
         };
     }
 
-    private getAlertTEAttributes(trackedEntity: D2TrackerTrackedEntity): {
-        maybeSuspectedDiseaseAttribute: Maybe<Attribute>;
-        maybeConfirmedDiseaseAttribute: Maybe<Attribute>;
-        maybeNationalEventIdAttribute: Maybe<Attribute>;
-        maybeIBSIdAttribute: Maybe<Attribute>;
-        maybeEBSIdAttribute: Maybe<Attribute>;
+    private getAlertTEAttributes(trackedEntity: TrackedEntityWithEnrollments): {
+        maybeSuspectedDiseaseAttribute: Maybe<TrackedEntityAttributeValue>;
+        maybeConfirmedDiseaseAttribute: Maybe<TrackedEntityAttributeValue>;
+        maybeNationalEventIdAttribute: Maybe<TrackedEntityAttributeValue>;
+        maybeIBSIdAttribute: Maybe<TrackedEntityAttributeValue>;
+        maybeEBSIdAttribute: Maybe<TrackedEntityAttributeValue>;
     } {
         const maybeNationalEventIdAttribute = getTEAttributeById(
             trackedEntity,
@@ -238,7 +242,7 @@ export class OutbreakAlertD2Repository implements OutbreakAlertRepository {
         orgUnit: Id;
         ouMode: "SELECTED" | "DESCENDANTS";
         programStatus: ProgramStatus;
-    }): FutureData<D2TrackerTrackedEntity[]> {
+    }): FutureData<TrackedEntityWithEnrollments[]> {
         const { program, orgUnit, ouMode, programStatus } = options;
 
         return Future.fromPromise(
@@ -253,7 +257,7 @@ export class OutbreakAlertD2Repository implements OutbreakAlertRepository {
 
     private getAlertTrackedEntities(options?: {
         programStatus?: ProgramStatus;
-    }): FutureData<D2TrackerTrackedEntity[]> {
+    }): FutureData<TrackedEntityWithEnrollments[]> {
         const { programStatus } = options || {};
         return this.getTrackedEntitiesByTEACode({
             program: RTSL_ZEBRA_ALERTS_PROGRAM_ID,

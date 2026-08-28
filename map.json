@@ -1,0 +1,122 @@
+[
+    {
+        "disease": "Rabies",
+        "id": "uUh2a2hq3lm",
+        "incidentStatus": "ALL",
+        "name": "Number of active verified - Rabies"
+    },
+    {
+        "disease": "Rabies",
+        "id": "zJs1gD7hebI",
+        "incidentStatus": "Watch",
+        "name": "Number of active verified - Rabies - Watch"
+    },
+    {
+        "disease": "Rabies",
+        "id": "jGjRXLdvOia",
+        "incidentStatus": "Alert",
+        "name": "Number of active verified - Rabies - Alert"
+    },
+    {
+        "disease": "Rabies",
+        "id": "cCrSegFAnj9",
+        "incidentStatus": "Respond",
+        "name": "Number of active verified - Rabies - Respond"
+    },
+    {
+        "disease": "Radiation agents",
+        "id": "DP3iW1M8q8T",
+        "incidentStatus": "ALL",
+        "name": "Number of active verified - Radiation agents"
+    },
+    {
+        "disease": "Radiation agents",
+        "id": "j6fBRxpWwI7",
+        "incidentStatus": "Watch",
+        "name": "Number of active verified - Radiation agents - Watch"
+    },
+    {
+        "disease": "Radiation agents",
+        "id": "CilnT6i3kaV",
+        "incidentStatus": "Alert",
+        "name": "Number of active verified - Radiation agents - Alert"
+    },
+    {
+        "disease": "Radiation agents",
+        "id": "v0wMS05JsuN",
+        "incidentStatus": "Respond",
+        "name": "Number of active verified - Radiation agents - Respond"
+    },
+    {
+        "disease": "Dengue",
+        "id": "U9Ti4ONtFuS",
+        "incidentStatus": "ALL",
+        "name": "Number of active verified - Dengue"
+    },
+    {
+        "disease": "Dengue",
+        "id": "HEhfsUn4rhX",
+        "incidentStatus": "Watch",
+        "name": "Number of active verified - Dengue - Watch"
+    },
+    {
+        "disease": "Dengue",
+        "id": "VNePjXo6Gr0",
+        "incidentStatus": "Alert",
+        "name": "Number of active verified - Dengue - Alert"
+    },
+    {
+        "disease": "Dengue",
+        "id": "P4ZeRpraKel",
+        "incidentStatus": "Respond",
+        "name": "Number of active verified - Dengue - Respond"
+    },
+    {
+        "disease": "Chikungunya",
+        "id": "iI6onONIjqX",
+        "incidentStatus": "ALL",
+        "name": "Number of active verified - Chikungunya"
+    },
+    {
+        "disease": "Chikungunya",
+        "id": "x9SPGDpV0aB",
+        "incidentStatus": "Watch",
+        "name": "Number of active verified - Chikungunya - Watch"
+    },
+    {
+        "disease": "Chikungunya",
+        "id": "bl9Z89bM1Ec",
+        "incidentStatus": "Alert",
+        "name": "Number of active verified - Chikungunya - Alert"
+    },
+    {
+        "disease": "Chikungunya",
+        "id": "LPGv3opTN0o",
+        "incidentStatus": "Respond",
+        "name": "Number of active verified - Chikungunya - Respond"
+    },
+    {
+        "disease": "Yellow Fever",
+        "id": "pi1VoSwAZpV",
+        "incidentStatus": "ALL",
+        "name": "Number of active verified - Yellow Fever"
+    },
+    {
+        "disease": "Yellow Fever",
+        "id": "Mtc8SmwCZiF",
+        "incidentStatus": "Watch",
+        "name": "Number of active verified - Yellow Fever - Watch"
+    },
+    {
+        "disease": "Yellow Fever",
+        "id": "xzxC4rt0WcG",
+        "incidentStatus": "Alert",
+        "name": "Number of active verified - Yellow Fever - Alert"
+    },
+    {
+        "disease": "Yellow Fever",
+        "id": "JluQ4MzkgRh",
+        "incidentStatus": "Respond",
+        "name": "Number of active verified - Yellow Fever - Respond"
+    }
+]

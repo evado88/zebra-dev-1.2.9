@@ -1,4 +1,4 @@
-import { D2TrackerEvent } from "@eyeseetea/d2-api/api/trackerEvents";
+import { D2TrackerEventToPost } from "@eyeseetea/d2-api/api/trackerEvents";
 
 import { D2Api, MetadataPick } from "../../types/d2-api";
 import { apiToFuture, FutureData } from "../api-futures";
@@ -19,6 +19,10 @@ import {
 import { TeamMember, TeamRole } from "../../domain/entities/incident-management-team/TeamMember";
 import { getProgramStage } from "./utils/MetadataHelper";
 import { assertOrError } from "./utils/AssertOrError";
+import {
+    IncidentManagementTeamEvent,
+    incidentManagementTeamEventFields,
+} from "./utils/IncidentManagementTeamMapper";
 import { Role } from "../../domain/entities/incident-management-team/Role";
 
 export class IncidentManagementTeamD2Repository implements IncidentManagementTeamRepository {
@@ -54,7 +58,7 @@ export class IncidentManagementTeamD2Repository implements IncidentManagementTea
         diseaseOutbreakId: Id,
         incidentManagementTeamRoleIds: Id[]
     ): FutureData<void> {
-        const d2IncidentManagementTeamRolesToDelete: D2TrackerEvent[] =
+        const d2IncidentManagementTeamRolesToDelete: D2TrackerEventToPost[] =
             incidentManagementTeamRoleIds.map(id => ({
                 event: id,
                 status: "COMPLETED",
@@ -82,22 +86,16 @@ export class IncidentManagementTeamD2Repository implements IncidentManagementTea
         });
     }
 
-    private getIncidentManagementTeamEvents(diseaseOutbreakId: Id): FutureData<D2TrackerEvent[]> {
+    private getIncidentManagementTeamEvents(
+        diseaseOutbreakId: Id
+    ): FutureData<IncidentManagementTeamEvent[]> {
         return apiToFuture(
             this.api.tracker.events.get({
                 program: RTSL_ZEBRA_PROGRAM_ID,
                 orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
                 trackedEntity: diseaseOutbreakId,
                 programStage: RTSL_ZEBRA_INCIDENT_MANAGEMENT_TEAM_BUILDER_PROGRAM_STAGE_ID,
-                fields: {
-                    dataValues: {
-                        dataElement: { id: true, code: true },
-                        value: true,
-                    },
-                    trackedEntity: true,
-                    event: true,
-                    updatedAt: true,
-                },
+                fields: incidentManagementTeamEventFields,
             })
         )
             .flatMap(response =>
@@ -139,13 +137,14 @@ export class IncidentManagementTeamD2Repository implements IncidentManagementTea
                     enrolledBefore: new Date().toISOString(),
                     program: RTSL_ZEBRA_PROGRAM_ID,
                     orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
+                    ouMode: "SELECTED",
                 })
             ).flatMap(enrollmentResponse => {
                 const enrollmentId = enrollmentResponse.instances[0]?.enrollment;
                 if (!enrollmentId) {
                     return Future.error(new Error(`Enrollment not found for Disease Outbreak`));
                 }
-                const d2Event: D2TrackerEvent = mapIncidentManagementTeamMemberToD2Event(
+                const d2Event: D2TrackerEventToPost = mapIncidentManagementTeamMemberToD2Event(
                     teamMemberRole,
                     incidentManagementTeamMember,
                     diseaseOutbreakId,

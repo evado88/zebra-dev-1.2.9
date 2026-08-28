@@ -26,9 +26,19 @@ import { getProgramStage } from "./utils/MetadataHelper";
 import { Future } from "../../domain/entities/generic/Future";
 import { Status, Verification } from "../../domain/entities/incident-action-plan/ResponseAction";
 import { assertOrError } from "./utils/AssertOrError";
-import { D2TrackerEvent } from "@eyeseetea/d2-api/api/trackerEvents";
+import { D2TrackerEventToPost } from "@eyeseetea/d2-api/api/trackerEvents";
 import { statusCodeMap, verificationCodeMap } from "./consts/IncidentActionConstants";
 import { FormType } from "../../webapp/pages/form-page/FormPage";
+
+const incidentActionEventFields = {
+    event: true,
+    updatedAt: true,
+    dataValues: {
+        dataElement: true,
+        value: true,
+    },
+    trackedEntity: true,
+} as const;
 
 export const incidentActionPlanIds = {
     iapType: "wr1I51WTHhl",
@@ -85,15 +95,7 @@ export type IncidentResponseActionDataValues = {
 export class IncidentActionD2Repository implements IncidentActionRepository {
     constructor(private api: D2Api) {}
 
-    private fields = {
-        event: true,
-        updatedAt: true,
-        dataValues: {
-            dataElement: { id: true, code: true },
-            value: true,
-        },
-        trackedEntity: true,
-    };
+    private fields = incidentActionEventFields;
 
     getIncidentActionPlan(diseaseOutbreakId: Id): FutureData<Maybe<IncidentActionPlanDataValues>> {
         return apiToFuture(
@@ -161,6 +163,7 @@ export class IncidentActionD2Repository implements IncidentActionRepository {
                     enrolledBefore: new Date().toISOString(),
                     program: RTSL_ZEBRA_PROGRAM_ID,
                     orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
+                    ouMode: "SELECTED",
                 })
             ).flatMap(enrollmentResponse => {
                 const enrollmentId = enrollmentResponse.instances[0]?.enrollment;
@@ -197,10 +200,11 @@ export class IncidentActionD2Repository implements IncidentActionRepository {
     }
 
     private deleteIncidentResponseAction(events: Id[]): FutureData<void> {
-        const d2Events: D2TrackerEvent[] = events.map(event => ({
+        const d2Events: D2TrackerEventToPost[] = events.map(event => ({
             event: event,
             status: "COMPLETED",
             program: RTSL_ZEBRA_PROGRAM_ID,
+            programStage: RTSL_ZEBRA_INCIDENT_RESPONSE_ACTION_PROGRAM_STAGE_ID,
             orgUnit: RTSL_ZEBRA_ORG_UNIT_ID,
             occurredAt: "",
             dataValues: [],
@@ -227,6 +231,7 @@ export class IncidentActionD2Repository implements IncidentActionRepository {
                 trackedEntity: diseaseOutbreakId,
                 programStage: RTSL_ZEBRA_INCIDENT_RESPONSE_ACTION_PROGRAM_STAGE_ID,
                 event: eventId,
+                ouMode: "SELECTED",
                 fields: {
                     enrollment: true,
                     dataValues: {
@@ -245,7 +250,7 @@ export class IncidentActionD2Repository implements IncidentActionRepository {
 
                 const valueCodeMaps = { ...statusCodeMap, ...verificationCodeMap };
 
-                const eventToPost: D2TrackerEvent = {
+                const eventToPost: D2TrackerEventToPost = {
                     event: eventId,
                     program: RTSL_ZEBRA_PROGRAM_ID,
                     programStage: RTSL_ZEBRA_INCIDENT_RESPONSE_ACTION_PROGRAM_STAGE_ID,

@@ -1,9 +1,10 @@
-import { D2TrackerTrackedEntity } from "@eyeseetea/d2-api/api/trackerTrackedEntities";
 import { Id } from "../../../domain/entities/Ref";
 import { D2Api, MetadataPick } from "../../../types/d2-api";
 import { apiToFuture } from "../../api-futures";
-import { Attribute } from "@eyeseetea/d2-api/api/trackedEntityInstances";
 import { Maybe } from "../../../utils/ts-utils";
+
+/** A tracked entity attribute reduced to the id/value pair the app works with. */
+export type TrackedEntityAttributeValue = { attribute: Id; value: string };
 
 export function getProgramTEAsMetadata(api: D2Api, programId: Id) {
     return apiToFuture(
@@ -26,9 +27,9 @@ export function getProgramTEAsMetadata(api: D2Api, programId: Id) {
 }
 
 export function getTEAttributeById(
-    trackedEntity: D2TrackerTrackedEntity,
+    trackedEntity: { attributes?: Array<TrackedEntityAttributeValue> },
     attributeId: Id
-): Maybe<Attribute> {
+): Maybe<TrackedEntityAttributeValue> {
     if (!trackedEntity.attributes) return undefined;
 
     return trackedEntity.attributes

@@ -1,7 +1,7 @@
 import { SelectedPick } from "@eyeseetea/d2-api/api";
 import { RiskAssessmentGrading } from "../../../domain/entities/risk-assessment/RiskAssessmentGrading";
 import { D2DataElementSchema } from "@eyeseetea/d2-api/2.36";
-import { D2TrackerEvent, DataValue } from "@eyeseetea/d2-api/api/trackerEvents";
+import { D2TrackerEventToPost } from "@eyeseetea/d2-api/api/trackerEvents";
 import {
     RTSL_ZEBRA_ORG_UNIT_ID,
     RTSL_ZEBRA_PROGRAM_ID,
@@ -43,7 +43,7 @@ import {
     RiskAssessmentSummaryFormData,
 } from "../../../domain/entities/ConfigurableForm";
 import { RiskAssessmentQuestionnaire } from "../../../domain/entities/risk-assessment/RiskAssessmentQuestionnaire";
-import { getPopulatedDataElement, getValueById } from "./helpers";
+import { DataValueToPost, EventDataValue, getPopulatedDataElement, getValueById } from "./helpers";
 
 export type D2ProgramStageDataElementsMetadata = {
     dataElement: SelectedPick<
@@ -65,7 +65,7 @@ export function mapRiskAssessmentToDataElements(
     teiId: Id,
     enrollmentId: Id,
     programStageDataElementsMetadata: D2ProgramStageDataElementsMetadata[]
-): D2TrackerEvent[] {
+): D2TrackerEventToPost[] {
     if (!formData.entity) throw new Error("No form data found");
     switch (formData.type) {
         case "risk-assessment-grading":
@@ -107,11 +107,11 @@ function mapRiskAssessmentGradingToDataElements(
     enrollmentId: Id,
     riskAssessmentGrading: RiskAssessmentGrading,
     programStageDataElementsMetadata: D2ProgramStageDataElementsMetadata[]
-): D2TrackerEvent {
+): D2TrackerEventToPost {
     const dataElementValues: Record<RiskAssessmentGradingCodes, string> =
         getValueFromRiskAssessmentGrading(riskAssessmentGrading);
 
-    const dataValues: DataValue[] = programStageDataElementsMetadata.map(programStage => {
+    const dataValues: DataValueToPost[] = programStageDataElementsMetadata.map(programStage => {
         if (!isStringInRiskAssessmentGradingCodes(programStage.dataElement.code)) {
             throw new Error("DataElement code not found in RiskAssessmentGradingCodes");
         }
@@ -133,11 +133,11 @@ function mapRiskAssessmentSummaryToDataElements(
     enrollmentId: Id,
     riskAssessmentSummary: RiskAssessmentSummary,
     programStageDataElementsMetadata: D2ProgramStageDataElementsMetadata[]
-): D2TrackerEvent {
+): D2TrackerEventToPost {
     const dataElementValues: Record<RiskAssessmentSummaryCodes, string> =
         getValueFromRiskAssessmentSummary(riskAssessmentSummary);
 
-    const dataValues: DataValue[] = programStageDataElementsMetadata.map(programStage => {
+    const dataValues: DataValueToPost[] = programStageDataElementsMetadata.map(programStage => {
         if (!isStringInRiskAssessmentSummaryCodes(programStage.dataElement.code)) {
             throw new Error(
                 `DataElement code ${programStage.dataElement.code}  not found in Risk Assessment Summary Codes`
@@ -162,12 +162,12 @@ function mapRiskAssessmentQuestionnaireToDataElements(
     enrollmentId: Id,
     riskAssessmentQuestionnaire: RiskAssessmentQuestionnaire,
     programStageDataElementsMetadata: D2ProgramStageDataElementsMetadata[]
-): D2TrackerEvent[] {
+): D2TrackerEventToPost[] {
     if (programStageId === RTSL_ZEBRA_RISK_ASSESSMENT_QUESTIONNAIRE_PROGRAM_STAGE_ID) {
         const dataElementValues: Record<RiskAssessmentStdQuestionnaireCodes, string> =
             getValueFromRiskAssessmentStdQuestionnaire(riskAssessmentQuestionnaire);
 
-        const dataValues: DataValue[] = programStageDataElementsMetadata.map(programStage => {
+        const dataValues: DataValueToPost[] = programStageDataElementsMetadata.map(programStage => {
             if (!isStringInRiskAssessmentStdQuestionnaireCodes(programStage.dataElement.code)) {
                 throw new Error(
                     `DataElement code ${programStage.dataElement.code}  not found in Risk Assessment Questionnaire Codes`
@@ -193,7 +193,7 @@ function mapRiskAssessmentQuestionnaireToDataElements(
             const dataElementValues: Record<RiskAssessmentCustomQuestionnaireCodes, string> =
                 getValueFromRiskAssessmentCustomQuestionnaire(customQuestion);
 
-            const dataValues: DataValue[] = programStageDataElementsMetadata.map(programStage => {
+            const dataValues: DataValueToPost[] = programStageDataElementsMetadata.map(programStage => {
                 if (
                     !isStringInRiskAssessmentCustomQuestionnaireCodes(programStage.dataElement.code)
                 ) {
@@ -225,10 +225,10 @@ function getRiskAssessmentTrackerEvent(
     programStageId: Id,
     id: Maybe<Id>,
     enrollmentId: Id,
-    dataValues: DataValue[],
+    dataValues: DataValueToPost[],
     teiId: Id
-): D2TrackerEvent {
-    const d2RiskAssessment: D2TrackerEvent = {
+): D2TrackerEventToPost {
+    const d2RiskAssessment: D2TrackerEventToPost = {
         event: id ?? "",
         status: "ACTIVE",
         program: RTSL_ZEBRA_PROGRAM_ID,
@@ -244,7 +244,7 @@ function getRiskAssessmentTrackerEvent(
 
 export function mapDataElementsToRiskAssessmentGrading(
     lastUpdated: string | undefined,
-    dataValues: DataValue[]
+    dataValues: EventDataValue[]
 ): RiskAssessmentGrading {
     const populationValue = getValueById(dataValues, riskAssessmentGradingIds.populationAtRisk);
     const attackRateValue = getValueById(dataValues, riskAssessmentGradingIds.attackRate);
@@ -279,7 +279,7 @@ export function mapDataElementsToRiskAssessmentGrading(
 
 export function mapDataElementsToRiskAssessmentSummary(
     id: Id,
-    dataValues: DataValue[]
+    dataValues: EventDataValue[]
 ): RiskAssessmentSummaryDataValues {
     const riskAssessmentDate = getValueById(
         dataValues,
@@ -359,7 +359,7 @@ export function mapDataElementsToRiskAssessmentSummary(
 
 export function mapDataElementsToStdRiskAssessmentQuestionnaire(
     id: Id,
-    dataValues: DataValue[]
+    dataValues: EventDataValue[]
 ): RiskAssessmentQuestionnaireBaseDataValues {
     const summary: RiskAssessmentQuestionnaireBaseDataValues = {
         id: id,
@@ -385,7 +385,7 @@ export function mapDataElementsToStdRiskAssessmentQuestionnaire(
 
 export function mapDataElementsToCustomRiskAssessmentQuestionnaire(
     id: Id,
-    dataValues: DataValue[]
+    dataValues: EventDataValue[]
 ): {
     id: Id;
     question: string;

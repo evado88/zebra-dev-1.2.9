@@ -4,7 +4,7 @@ import { Resource } from "../../domain/entities/resources/Resource";
 import { apiToFuture, FutureData } from "../api-futures";
 import { Future } from "../../domain/entities/generic/Future";
 import { Id } from "../../domain/entities/Ref";
-import { D2TrackerEvent, TrackerEventsResponse } from "@eyeseetea/d2-api/api/trackerEvents";
+import { D2TrackerEventToPost } from "@eyeseetea/d2-api/api/trackerEvents";
 import { getProgramStage } from "./utils/MetadataHelper";
 import {
     eventFields,
@@ -13,15 +13,20 @@ import {
     RTSL_ZEBRA_RESOURCES_EVENT_PROGRAM_STAGE_ID,
     RTSL_ZEBRA_RESOURCES_ORG_UNIT_ID,
 } from "./consts/ResourceConstants";
-import { mapD2TrackerEventToResource, mapResourceToD2TrackerEvent } from "./utils/ResourceMapper";
+import {
+    D2ResourceEvent,
+    mapD2TrackerEventToResource,
+    mapResourceToD2TrackerEvent,
+} from "./utils/ResourceMapper";
 import { TrackerPostResponse } from "@eyeseetea/d2-api/api/tracker";
+import { getTotalPages } from "./utils/getAllTrackedEntities";
 
 export class ResourceD2Repository implements ResourceRepository {
     constructor(private api: D2Api) {}
 
     getAll(options?: { ids?: Id[]; diseaseOutbreakId?: Id }): FutureData<Resource[]> {
         return Future.fromPromise(this.getAllD2TrackerEventResourcesAsync(options)).flatMap(
-            (d2Events: D2TrackerEvent[]) => {
+            (d2Events: D2ResourceEvent[]) => {
                 return Future.success(
                     d2Events.map(d2Event => mapD2TrackerEventToResource(d2Event))
                 );
@@ -38,7 +43,7 @@ export class ResourceD2Repository implements ResourceRepository {
                 if (!resourcesDataElements)
                     return Future.error(new Error(`Resources data elements not found`));
 
-                const resourceEventToCreate: D2TrackerEvent = mapResourceToD2TrackerEvent(
+                const resourceEventToCreate: D2TrackerEventToPost = mapResourceToD2TrackerEvent(
                     resource,
                     resourcesDataElements
                 );
@@ -66,7 +71,7 @@ export class ResourceD2Repository implements ResourceRepository {
             this.api.tracker.events.getById(id, {
                 fields: eventFields,
             })
-        ).flatMap((eventToDelete: D2TrackerEvent) => {
+        ).flatMap(eventToDelete => {
             return apiToFuture(
                 this.api.tracker.post({ importStrategy: "DELETE" }, { events: [eventToDelete] })
             ).flatMap(response => {
@@ -81,17 +86,17 @@ export class ResourceD2Repository implements ResourceRepository {
     private async getAllD2TrackerEventResourcesAsync(options?: {
         ids?: Id[];
         diseaseOutbreakId?: Id;
-    }): Promise<D2TrackerEvent[]> {
+    }): Promise<D2ResourceEvent[]> {
         const { ids, diseaseOutbreakId } = options || {};
 
-        const d2TrackerEvents: D2TrackerEvent[] = [];
+        const d2TrackerEvents: D2ResourceEvent[] = [];
         const pageSize = 250;
         let page = 1;
-        let result: TrackerEventsResponse;
+        let totalPages = 1;
 
         try {
             do {
-                result = await this.api.tracker.events
+                const result = await this.api.tracker.events
                     .get({
                         program: RTSL_ZEBRA_RESOURCES_EVENT_PROGRAM_ID,
                         programStage: RTSL_ZEBRA_RESOURCES_EVENT_PROGRAM_STAGE_ID,
@@ -111,11 +116,13 @@ export class ResourceD2Repository implements ResourceRepository {
 
                 d2TrackerEvents.push(...result.instances);
 
+                totalPages = getTotalPages(result, pageSize);
                 page++;
-            } while (result.page < Math.ceil((result.total as number) / pageSize));
+            } while (page <= totalPages);
             return d2TrackerEvents;
-        } catch {
-            return [];
+        } catch (error) {
+            console.error("Error fetching resource events", error);
+            throw error;
         }
     }
 }
