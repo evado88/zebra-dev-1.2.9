@@ -1,7 +1,4 @@
-import {
-    D2TrackerEventSchema,
-    D2TrackerEventToPost,
-} from "@eyeseetea/d2-api/api/trackerEvents";
+import { D2TrackerEventSchema, D2TrackerEventToPost } from "@eyeseetea/d2-api/api/trackerEvents";
 
 import { IncidentManagementTeam } from "../../../domain/entities/incident-management-team/IncidentManagementTeam";
 import { DataValueToPost, EventDataValue, getPopulatedDataElement, getValueById } from "./helpers";
