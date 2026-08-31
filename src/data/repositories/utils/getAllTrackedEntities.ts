@@ -101,7 +101,11 @@ export async function getAllTrackedEntitiesAsync(
  * returning it at the top level, so both shapes are read here.
  */
 export function getTotalPages(
-    response: { pageCount?: number; total?: number; pager?: { pageCount?: number; total?: number } },
+    response: {
+        pageCount?: number;
+        total?: number;
+        pager?: { pageCount?: number; total?: number };
+    },
     pageSize: number
 ): number {
     const pager = response.pager ?? response;

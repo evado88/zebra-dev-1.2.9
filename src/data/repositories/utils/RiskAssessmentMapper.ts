@@ -193,21 +193,25 @@ function mapRiskAssessmentQuestionnaireToDataElements(
             const dataElementValues: Record<RiskAssessmentCustomQuestionnaireCodes, string> =
                 getValueFromRiskAssessmentCustomQuestionnaire(customQuestion);
 
-            const dataValues: DataValueToPost[] = programStageDataElementsMetadata.map(programStage => {
-                if (
-                    !isStringInRiskAssessmentCustomQuestionnaireCodes(programStage.dataElement.code)
-                ) {
-                    throw new Error(
-                        `DataElement code ${programStage.dataElement.code}  not found in Custom Risk Assessment Questionnaire Codes`
+            const dataValues: DataValueToPost[] = programStageDataElementsMetadata.map(
+                programStage => {
+                    if (
+                        !isStringInRiskAssessmentCustomQuestionnaireCodes(
+                            programStage.dataElement.code
+                        )
+                    ) {
+                        throw new Error(
+                            `DataElement code ${programStage.dataElement.code}  not found in Custom Risk Assessment Questionnaire Codes`
+                        );
+                    }
+                    const typedCode: RiskAssessmentCustomQuestionnaireKeyCode =
+                        programStage.dataElement.code;
+                    return getPopulatedDataElement(
+                        programStage.dataElement.id,
+                        dataElementValues[typedCode]
                     );
                 }
-                const typedCode: RiskAssessmentCustomQuestionnaireKeyCode =
-                    programStage.dataElement.code;
-                return getPopulatedDataElement(
-                    programStage.dataElement.id,
-                    dataElementValues[typedCode]
-                );
-            });
+            );
             return getRiskAssessmentTrackerEvent(
                 programStageId,
                 customQuestion.id,
