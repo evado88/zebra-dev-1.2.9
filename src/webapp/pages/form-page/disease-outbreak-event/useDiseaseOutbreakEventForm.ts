@@ -94,6 +94,7 @@ export function useDiseaseOutbreakEventForm(params: {
                         }
                     },
                     err => {
+                        setIsLoading(false);
                         setGlobalMessage({
                             text: i18n.t(
                                 formDataWithEntityData.type === "disease-outbreak-event-case-data"
@@ -164,6 +165,7 @@ export function useDiseaseOutbreakEventForm(params: {
                         }
                     },
                     err => {
+                        setIsLoading(false);
                         setGlobalMessage({
                             text: i18n.t(`Error saving disease outbreak: ${err.message}`),
                             type: "error",
